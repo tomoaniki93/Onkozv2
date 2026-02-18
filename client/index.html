@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ONKOZ — Voice & Chat Platform</title>
+  <link rel="icon" type="image/png" href="/assets/icon.png" />
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+
+<!-- ── AUTH SCREEN ─────────────────────────────────────────────────────────── -->
+<div id="auth-screen" class="auth-screen">
+  <div class="auth-card">
+    <div class="auth-logo">
+      <img src="/assets/logo.png" alt="ONKOZ" onerror="this.style.display='none'" />
+      <span class="auth-logo-text">ONKOZ</span>
+      <p class="auth-subtitle">VOICE &amp; CHAT PLATFORM</p>
+    </div>
+
+    <!-- Setup admin (1ère installation) -->
+    <div id="setup-form" class="auth-form hidden">
+      <h2>Configuration initiale</h2>
+      <p class="auth-info">Aucun administrateur trouvé. Créez le compte admin.</p>
+      <input type="text" id="setup-username" placeholder="Pseudo admin" maxlength="20" />
+      <input type="password" id="setup-password" placeholder="Mot de passe" />
+      <button id="setup-btn" class="btn btn-primary">Créer le compte admin</button>
+    </div>
+
+    <!-- Choix : connexion ou inscription -->
+    <div id="auth-tabs" class="auth-tabs">
+      <button class="tab-btn active" data-tab="login">Connexion</button>
+      <button class="tab-btn" data-tab="register">Inscription</button>
+    </div>
+
+    <div id="login-form" class="auth-form">
+      <input type="text" id="login-username" placeholder="Pseudo" maxlength="20" autocomplete="username" />
+      <input type="password" id="login-password" placeholder="Mot de passe" autocomplete="current-password" />
+      <button id="login-btn" class="btn btn-primary">Se connecter</button>
+    </div>
+
+    <div id="register-form" class="auth-form hidden">
+      <div class="auth-warning">⚠️ Ton pseudo est <strong>définitif</strong> et ne pourra pas être changé.</div>
+      <input type="text" id="reg-username" placeholder="Choisis ton pseudo (définitif)" maxlength="20" autocomplete="username" />
+      <input type="password" id="reg-password" placeholder="Mot de passe (min 6 caractères)" autocomplete="new-password" />
+      <button id="register-btn" class="btn btn-primary">Créer mon compte</button>
+    </div>
+
+    <div id="auth-error" class="auth-error hidden"></div>
+  </div>
+</div>
+
+<!-- ── MAIN APP ─────────────────────────────────────────────────────────────── -->
+<div id="app" class="app hidden">
+
+  <!-- Sidebar gauche -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <img src="/assets/logo.png" alt="ONKOZ" class="sidebar-logo" onerror="this.style.display='none'" />
+      <span class="sidebar-title">ONKOZ</span>
+    </div>
+
+    <!-- Salons texte -->
+    <div class="channel-section">
+      <div class="section-header">
+        <span>SALONS TEXTE</span>
+        <button id="create-text-channel" class="btn-icon add-btn" title="Créer un salon texte" style="display:none">+</button>
+      </div>
+      <ul id="text-channels" class="channel-list"></ul>
+    </div>
+
+    <!-- Salons vocaux -->
+    <div class="channel-section">
+      <div class="section-header">
+        <span>SALONS VOCAUX</span>
+        <button id="create-voice-channel" class="btn-icon add-btn" title="Créer un salon vocal" style="display:none">+</button>
+      </div>
+      <ul id="voice-channels" class="channel-list"></ul>
+    </div>
+
+    <!-- Salons éphémères -->
+    <div class="channel-section">
+      <div class="section-header">
+        <span>SALONS ÉPHÉMÈRES</span>
+        <button id="create-ephemeral" class="btn-icon add-btn" title="Créer un salon éphémère">+</button>
+      </div>
+      <ul id="ephemeral-channels" class="channel-list"></ul>
+    </div>
+
+    <!-- User info en bas -->
+    <div class="sidebar-footer">
+      <div class="user-badge" id="current-user-badge">
+        <span class="user-avatar" id="footer-avatar">?</span>
+        <div class="user-info">
+          <span class="username" id="footer-username"></span>
+          <span class="role-badge" id="footer-role"></span>
+        </div>
+        <button class="btn-icon logout-btn" id="logout-btn" title="Se déconnecter">⏏</button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Zone centrale -->
+  <main class="main-area">
+    <!-- Header canal -->
+    <div class="channel-header">
+      <span id="channel-icon">#</span>
+      <span id="channel-name">Sélectionne un salon</span>
+      <div class="voice-controls hidden" id="voice-controls">
+        <button id="mute-btn" class="btn-icon voice-btn" title="Muet / Non muet">🎤</button>
+        <button id="leave-voice-btn" class="btn-icon voice-btn danger" title="Quitter le vocal">📞</button>
+      </div>
+    </div>
+
+    <!-- Zone de contenu (chat ou vocal) -->
+    <div class="content-area" id="content-area">
+      <div class="welcome-screen">
+        <div class="welcome-icon">🎤</div>
+        <h2>Bienvenue sur ONKOZ</h2>
+        <p>Sélectionne un salon pour commencer</p>
+      </div>
+    </div>
+
+    <!-- Barre d'envoi de message -->
+    <div class="message-input-area" id="message-input-area" style="display:none">
+      <div class="message-input-wrapper">
+        <input type="text" id="message-input" placeholder="Message..." maxlength="2000" />
+        <button id="send-btn" class="btn btn-send">↑</button>
+      </div>
+    </div>
+  </main>
+
+  <!-- Sidebar droite (utilisateurs) -->
+  <aside class="users-sidebar">
+    <div class="users-header">MEMBRES</div>
+    <div id="online-section">
+      <div class="users-category">EN LIGNE</div>
+      <ul id="online-users" class="users-list"></ul>
+    </div>
+    <div id="offline-section">
+      <div class="users-category">HORS LIGNE</div>
+      <ul id="offline-users" class="users-list"></ul>
+    </div>
+  </aside>
+</div>
+
+<!-- DM Panel (overlay) -->
+<div id="dm-panel" class="dm-panel hidden">
+  <div class="dm-header">
+    <span>Message privé avec <strong id="dm-partner-name"></strong></span>
+    <button id="close-dm" class="btn-icon">✕</button>
+  </div>
+  <div id="dm-messages" class="dm-messages"></div>
+  <div class="dm-input-area">
+    <input type="text" id="dm-input" placeholder="Message privé..." maxlength="2000" />
+    <button id="dm-send-btn" class="btn btn-send">↑</button>
+  </div>
+</div>
+
+<!-- Modal admin : créer salon -->
+<div id="modal-overlay" class="modal-overlay hidden">
+  <div class="modal">
+    <h3 id="modal-title">Créer un salon</h3>
+    <input type="text" id="modal-channel-name" placeholder="nom-du-salon" maxlength="32" />
+    <div id="modal-ephemeral-opts" class="hidden">
+      <label><input type="checkbox" id="eph-with-text" /> Ajouter un salon texte</label>
+    </div>
+    <div class="modal-actions">
+      <button id="modal-cancel" class="btn btn-ghost">Annuler</button>
+      <button id="modal-confirm" class="btn btn-primary">Créer</button>
+    </div>
+  </div>
+</div>
+
+<!-- Scripts -->
+<script src="/socket.io/socket.io.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mediasoup-client@3/dist/mediasoup-client.min.js"></script>
+<script src="/js/api.js"></script>
+<script src="/js/auth.js"></script>
+<script src="/js/ui.js"></script>
+<script src="/js/voice.js"></script>
+<script src="/js/chat.js"></script>
+<script src="/js/app.js"></script>
+</body>
+</html>

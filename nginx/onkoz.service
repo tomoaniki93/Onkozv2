@@ -1,0 +1,25 @@
+[Unit]
+Description=ONKOZ Voice & Chat Platform
+After=network.target
+
+[Service]
+Type=simple
+User=onkoz
+WorkingDirectory=/opt/onkoz
+EnvironmentFile=/opt/onkoz/.env
+ExecStart=/usr/bin/node server/index.js
+Restart=on-failure
+RestartSec=5
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=onkoz
+
+# Sécurité
+NoNewPrivileges=yes
+PrivateTmp=yes
+
+# Ports RTC (mediasoup UDP) — doit correspondre à RTC_MIN_PORT / RTC_MAX_PORT
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
