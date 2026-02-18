@@ -78,19 +78,13 @@ input  { font: inherit; }
   text-align: center;
   margin-bottom: 1.5rem;
 }
-.auth-logo img { width: 72px; height: 72px; margin-bottom: .5rem; }
-.auth-logo-text {
+.auth-logo-full {
+  width: 100%;
+  max-width: 280px;
+  height: auto;
   display: block;
-  font-size: 1.6rem;
-  font-weight: 800;
-  letter-spacing: .1em;
-  color: var(--accent-light);
-}
-.auth-subtitle {
-  font-size: .7rem;
-  letter-spacing: .2em;
-  color: var(--text-muted);
-  margin-top: .2rem;
+  margin: 0 auto;
+  border-radius: 10px;
 }
 
 .auth-tabs {
@@ -219,7 +213,7 @@ input  { font: inherit; }
   font-size: .95rem;
   flex-shrink: 0;
 }
-.sidebar-logo { width: 26px; height: 26px; object-fit: contain; }
+.sidebar-logo { width: 28px; height: 28px; object-fit: contain; border-radius: 4px; }
 .sidebar-title { color: var(--accent-light); letter-spacing: .05em; }
 
 .channel-section {
