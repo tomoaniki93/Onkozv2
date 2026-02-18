@@ -1,0 +1,61 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Base ────────────────────────────────────────────────────────────────── */
+@layer base {
+  * { box-sizing: border-box; }
+
+  body {
+    @apply bg-onkoz-bg text-onkoz-text font-sans overflow-hidden h-screen;
+  }
+
+  ::-webkit-scrollbar        { width: 6px; }
+  ::-webkit-scrollbar-track  { background: transparent; }
+  ::-webkit-scrollbar-thumb  { @apply bg-onkoz-border rounded; }
+
+  input, button { font: inherit; }
+  ul { list-style: none; padding: 0; margin: 0; }
+}
+
+/* ── Components réutilisables ─────────────────────────────────────────────── */
+@layer components {
+
+  /* Couleurs avatar (générées dynamiquement en JS) */
+  .av-0 { background-color: #7c5cbf; }
+  .av-1 { background-color: #3ba55c; }
+  .av-2 { background-color: #ed4245; }
+  .av-3 { background-color: #faa61a; }
+  .av-4 { background-color: #5865f2; }
+  .av-5 { background-color: #eb459e; }
+  .av-6 { background-color: #00b0f4; }
+  .av-7 { background-color: #57f287; }
+
+  /* Badges de rôle */
+  .role-badge {
+    @apply text-2xs font-bold px-1.5 py-px rounded uppercase tracking-wider;
+  }
+  .role-badge.admin     { @apply text-onkoz-admin     bg-onkoz-admin/15; }
+  .role-badge.moderator { @apply text-onkoz-mod       bg-onkoz-mod/15;   }
+  .role-badge.user      { @apply text-onkoz-user      bg-onkoz-user/15;  }
+
+  /* Auteur de message */
+  .msg-author.admin     { @apply text-onkoz-admin; }
+  .msg-author.moderator { @apply text-onkoz-mod; }
+  .msg-author.user      { @apply text-onkoz-text; }
+
+  /* Peer vocal (bordure speaking) */
+  .voice-peer { @apply border-2 border-onkoz-border; }
+  .voice-peer.speaking {
+    @apply border-onkoz-success animate-speaking;
+  }
+
+  /* Animations */
+  @keyframes pulse_soft {
+    0%, 100% { transform: scale(1); }
+    50%       { transform: scale(1.05); }
+  }
+  .animate-speaking {
+    animation: pulse_soft 0.6s ease-in-out infinite;
+  }
+}

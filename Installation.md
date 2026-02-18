@@ -50,6 +50,7 @@ chown -R onkoz:onkoz /opt/onkoz
 su - onkoz
 cd /opt/onkoz
 npm install
+npm run build:css  # compile client/css/input.css → client/css/style.css (Tailwind)
 ```
 
 ---
@@ -184,6 +185,7 @@ su - onkoz
 cd /opt/onkoz
 git pull   # si vous utilisez git
 npm install
+npm run build:css  # compile client/css/input.css → client/css/style.css (Tailwind)
 systemctl restart onkoz   # en root
 ```
 
