@@ -13,7 +13,8 @@ const { setupSocketHandlers }      = require('./socket/handlers');
 
 const authRoutes     = require('./routes/auth');
 const channelRoutes  = require('./routes/channels');
-const userRoutes     = require('./routes/users');
+const userRoutes      = require('./routes/users');
+const categoryRoutes  = require('./routes/categories');
 
 const PORT = process.env.PORT || 3000;
 
@@ -34,7 +35,8 @@ app.use(express.static(path.join(__dirname, '..', 'client')));
 // ── Routes API ────────────────────────────────────────────────────────────────
 app.use('/api/auth',     authRoutes);
 app.use('/api/channels', channelRoutes);
-app.use('/api/users',    userRoutes);
+app.use('/api/users',      userRoutes);
+app.use('/api/categories', categoryRoutes);
 
 // Health check
 app.get('/api/health', (_, res) => res.json({ status: 'ok', ts: Date.now() }));

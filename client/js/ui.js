@@ -31,23 +31,78 @@ const UI = (() => {
 
   // ── Modal ──────────────────────────────────────────────────────────────────
   function openModal(title, opts = {}) {
+    // opts.mode: 'category' | 'channel' | 'ephemeral'
     return new Promise(resolve => {
       document.getElementById('modal-title').textContent = title;
       const input = document.getElementById('modal-channel-name');
       input.value = '';
-      input.placeholder = opts.placeholder || 'nom';
+      input.placeholder = opts.placeholder || 'Nom...';
 
+      const mode = opts.mode || 'channel';
+
+      // ── Sélecteur type texte/vocal ──
+      const typeOpts = document.getElementById('modal-type-opts');
+      let selectedType = 'text';
+      if (mode === 'channel') {
+        typeOpts.classList.remove('hidden');
+        typeOpts.classList.add('flex');
+        selectedType = 'text';
+        document.querySelectorAll('.type-btn').forEach(btn => {
+          const active = btn.dataset.type === 'text';
+          btn.className = `type-btn flex-1 py-2 rounded-md border text-sm font-medium transition-colors ${active ? 'border-onkoz-accent bg-onkoz-accent/20 text-onkoz-accent-lt' : 'border-onkoz-border text-onkoz-text-md hover:bg-onkoz-hover'}`;
+          btn.onclick = () => {
+            selectedType = btn.dataset.type;
+            document.querySelectorAll('.type-btn').forEach(b => {
+              b.className = `type-btn flex-1 py-2 rounded-md border text-sm font-medium transition-colors ${b.dataset.type === selectedType ? 'border-onkoz-accent bg-onkoz-accent/20 text-onkoz-accent-lt' : 'border-onkoz-border text-onkoz-text-md hover:bg-onkoz-hover'}`;
+            });
+          };
+        });
+      } else {
+        typeOpts.classList.add('hidden');
+        typeOpts.classList.remove('flex');
+      }
+
+      // ── Sélecteur catégorie ──
+      const catOpts = document.getElementById('modal-category-opts');
+      if (mode === 'channel' && opts.categories?.length) {
+        catOpts.classList.remove('hidden');
+        catOpts.classList.add('flex');
+        const sel = document.getElementById('modal-category-select');
+        sel.innerHTML = '<option value="">— Aucune catégorie —</option>';
+        opts.categories.forEach(cat => {
+          const opt = document.createElement('option');
+          opt.value = cat.id;
+          opt.textContent = cat.name;
+          if (cat.id == opts.defaultCategoryId) opt.selected = true;
+          sel.appendChild(opt);
+        });
+      } else {
+        catOpts.classList.add('hidden');
+        catOpts.classList.remove('flex');
+      }
+
+      // ── Éphémère texte ──
       const ephOpts = document.getElementById('modal-ephemeral-opts');
-      opts.ephemeral ? ephOpts.classList.remove('hidden') : ephOpts.classList.add('hidden');
+      if (mode === 'ephemeral') {
+        ephOpts.classList.remove('hidden');
+        document.getElementById('eph-with-text').checked = false;
+      } else {
+        ephOpts.classList.add('hidden');
+      }
 
+      // ── Ouvrir ──
       const overlay = document.getElementById('modal-overlay');
       overlay.classList.remove('hidden');
       overlay.classList.add('flex');
-      input.focus();
+      setTimeout(() => input.focus(), 50);
 
       function close(val) {
         overlay.classList.add('hidden');
         overlay.classList.remove('flex');
+        typeOpts.classList.add('hidden');
+        typeOpts.classList.remove('flex');
+        catOpts.classList.add('hidden');
+        catOpts.classList.remove('flex');
         document.getElementById('modal-confirm').replaceWith(document.getElementById('modal-confirm').cloneNode(true));
         document.getElementById('modal-cancel').replaceWith(document.getElementById('modal-cancel').cloneNode(true));
         resolve(val);
@@ -56,7 +111,13 @@ const UI = (() => {
       document.getElementById('modal-confirm').addEventListener('click', () => {
         const name = input.value.trim();
         if (!name) return;
-        close({ name, withText: document.getElementById('eph-with-text')?.checked || false });
+        const categoryId = document.getElementById('modal-category-select')?.value || null;
+        close({
+          name,
+          type: selectedType,
+          categoryId: categoryId ? parseInt(categoryId) : null,
+          withText: document.getElementById('eph-with-text')?.checked || false,
+        });
       });
       document.getElementById('modal-cancel').addEventListener('click', () => close(null));
       input.addEventListener('keydown', e => {

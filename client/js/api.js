@@ -55,3 +55,15 @@ const API = (() => {
     getUnreadCount: ()        => request('GET', '/users/dm/unread/count'),
   };
 })();
+
+// Patch API to add categories support
+const _origAPI = API;
+Object.assign(API, {
+  // ── Categories ─────────────────────────────────────────────────────────
+  getCategories:    ()           => API.get('/categories'),
+  createCategory:   (name, pos)  => API.post('/categories', { name, position: pos || 0 }),
+  renameCategory:   (id, name)   => API.patch(`/categories/${id}`, { name }),
+  deleteCategory:   (id)         => API.delete(`/categories/${id}`),
+  assignToCategory: (catId, chId) => API.post(`/categories/${catId}/channels/${chId}`),
+  createChannelInCategory: (name, type, catId) => API.post('/channels', { name, type, category_id: catId }),
+});

@@ -11,167 +11,107 @@
 
 <!-- ══════════════════════════════════════════════════════════════════════════
      AUTH SCREEN
-     ══════════════════════════════════════════════════════════════════════════ -->
-<div id="auth-screen"
-     class="fixed inset-0 flex items-center justify-center z-50"
-     style="background: radial-gradient(ellipse at 60% 40%, #2d1f4e 0%, #1e1f22 70%)">
-
+══════════════════════════════════════════════════════════════════════════ -->
+<div id="auth-screen" class="fixed inset-0 flex items-center justify-center z-50"
+     style="background:radial-gradient(ellipse at 60% 40%,#2d1f4e 0%,#1e1f22 70%)">
   <div class="bg-onkoz-surface border border-onkoz-border rounded-xl p-8 w-[360px] shadow-card flex flex-col gap-4">
 
-    <!-- Logo complet -->
     <div class="flex justify-center mb-1">
       <img src="/assets/logo.png" alt="ONKOZ" class="w-full max-w-[280px] h-auto rounded-lg" />
     </div>
 
-    <!-- Setup admin (1ère installation) -->
+    <!-- Setup admin -->
     <div id="setup-form" class="hidden flex-col gap-3">
       <h2 class="text-center font-bold text-lg">Configuration initiale</h2>
-      <p class="text-center text-sm text-onkoz-text-md">Aucun administrateur trouvé. Créez le compte admin.</p>
+      <p class="text-center text-sm text-onkoz-text-md">Aucun administrateur trouvé.</p>
       <input id="setup-username" type="text" maxlength="20" placeholder="Pseudo admin"
-             class="bg-onkoz-deep border border-onkoz-border rounded-md px-3 py-2.5 text-onkoz-text outline-none focus:border-onkoz-accent transition-colors" />
+             class="bg-onkoz-deep border border-onkoz-border rounded-md px-3 py-2.5 outline-none focus:border-onkoz-accent transition-colors" />
       <input id="setup-password" type="password" placeholder="Mot de passe"
-             class="bg-onkoz-deep border border-onkoz-border rounded-md px-3 py-2.5 text-onkoz-text outline-none focus:border-onkoz-accent transition-colors" />
-      <button id="setup-btn"
-              class="bg-onkoz-accent hover:bg-onkoz-accent-dk text-white font-semibold py-2.5 rounded-md transition-colors">
+             class="bg-onkoz-deep border border-onkoz-border rounded-md px-3 py-2.5 outline-none focus:border-onkoz-accent transition-colors" />
+      <button id="setup-btn" class="bg-onkoz-accent hover:bg-onkoz-accent-dk text-white font-semibold py-2.5 rounded-md transition-colors">
         Créer le compte admin
       </button>
     </div>
 
-    <!-- Onglets Connexion / Inscription -->
+    <!-- Onglets -->
     <div id="auth-tabs" class="flex rounded-md overflow-hidden bg-onkoz-deep">
-      <button class="tab-btn flex-1 py-2 font-medium text-onkoz-text-md hover:bg-onkoz-hover transition-colors active"
-              data-tab="login">Connexion</button>
-      <button class="tab-btn flex-1 py-2 font-medium text-onkoz-text-md hover:bg-onkoz-hover transition-colors"
-              data-tab="register">Inscription</button>
+      <button class="tab-btn flex-1 py-2 font-medium text-onkoz-text-md hover:bg-onkoz-hover transition-colors active" data-tab="login">Connexion</button>
+      <button class="tab-btn flex-1 py-2 font-medium text-onkoz-text-md hover:bg-onkoz-hover transition-colors" data-tab="register">Inscription</button>
     </div>
 
-    <!-- Connexion -->
+    <!-- Login -->
     <div id="login-form" class="flex flex-col gap-3">
       <input id="login-username" type="text" maxlength="20" placeholder="Pseudo" autocomplete="username"
-             class="bg-onkoz-deep border border-onkoz-border rounded-md px-3 py-2.5 text-onkoz-text outline-none focus:border-onkoz-accent transition-colors" />
+             class="bg-onkoz-deep border border-onkoz-border rounded-md px-3 py-2.5 outline-none focus:border-onkoz-accent transition-colors" />
       <input id="login-password" type="password" placeholder="Mot de passe" autocomplete="current-password"
-             class="bg-onkoz-deep border border-onkoz-border rounded-md px-3 py-2.5 text-onkoz-text outline-none focus:border-onkoz-accent transition-colors" />
-      <button id="login-btn"
-              class="bg-onkoz-accent hover:bg-onkoz-accent-dk text-white font-semibold py-2.5 rounded-md transition-colors">
-        Se connecter
-      </button>
+             class="bg-onkoz-deep border border-onkoz-border rounded-md px-3 py-2.5 outline-none focus:border-onkoz-accent transition-colors" />
+      <button id="login-btn" class="bg-onkoz-accent hover:bg-onkoz-accent-dk text-white font-semibold py-2.5 rounded-md transition-colors">Se connecter</button>
     </div>
 
-    <!-- Inscription -->
+    <!-- Register -->
     <div id="register-form" class="hidden flex-col gap-3">
       <div class="bg-onkoz-user/10 border border-onkoz-user/30 rounded-md px-3 py-2.5 text-onkoz-user text-sm">
         ⚠️ Ton pseudo est <strong>définitif</strong> et ne pourra pas être changé.
       </div>
       <input id="reg-username" type="text" maxlength="20" placeholder="Choisis ton pseudo (définitif)" autocomplete="username"
-             class="bg-onkoz-deep border border-onkoz-border rounded-md px-3 py-2.5 text-onkoz-text outline-none focus:border-onkoz-accent transition-colors" />
+             class="bg-onkoz-deep border border-onkoz-border rounded-md px-3 py-2.5 outline-none focus:border-onkoz-accent transition-colors" />
       <input id="reg-password" type="password" placeholder="Mot de passe (min 6 caractères)" autocomplete="new-password"
-             class="bg-onkoz-deep border border-onkoz-border rounded-md px-3 py-2.5 text-onkoz-text outline-none focus:border-onkoz-accent transition-colors" />
-      <button id="register-btn"
-              class="bg-onkoz-accent hover:bg-onkoz-accent-dk text-white font-semibold py-2.5 rounded-md transition-colors">
-        Créer mon compte
-      </button>
+             class="bg-onkoz-deep border border-onkoz-border rounded-md px-3 py-2.5 outline-none focus:border-onkoz-accent transition-colors" />
+      <button id="register-btn" class="bg-onkoz-accent hover:bg-onkoz-accent-dk text-white font-semibold py-2.5 rounded-md transition-colors">Créer mon compte</button>
     </div>
 
-    <!-- Erreur auth -->
-    <div id="auth-error"
-         class="hidden bg-onkoz-danger/15 border border-onkoz-danger/40 rounded-md px-3 py-2.5 text-onkoz-danger text-sm text-center">
-    </div>
+    <div id="auth-error" class="hidden bg-onkoz-danger/15 border border-onkoz-danger/40 rounded-md px-3 py-2.5 text-onkoz-danger text-sm text-center"></div>
   </div>
 </div>
 
 <!-- ══════════════════════════════════════════════════════════════════════════
-     APP PRINCIPALE
-     ══════════════════════════════════════════════════════════════════════════ -->
+     APP
+══════════════════════════════════════════════════════════════════════════ -->
 <div id="app" class="hidden grid grid-cols-app h-screen overflow-hidden">
 
-  <!-- ── SIDEBAR GAUCHE ───────────────────────────────────────────────────── -->
+  <!-- ── SIDEBAR GAUCHE ─────────────────────────────────────────────────── -->
   <aside class="bg-onkoz-surface border-r border-onkoz-border flex flex-col overflow-hidden">
 
-    <!-- Logo + titre -->
+    <!-- Header logo -->
     <div class="flex items-center gap-2.5 px-4 h-12 border-b border-onkoz-border shrink-0">
       <img src="/assets/icon.png" alt="ONKOZ" class="w-7 h-7 object-contain rounded-sm" />
       <span class="font-bold text-onkoz-accent-lt tracking-wide text-[0.95rem]">ONKOZ</span>
     </div>
 
-    <!-- Salons texte -->
-    <div class="py-3 border-b border-onkoz-border">
-      <div class="flex items-center justify-between px-3 mb-1">
-        <span class="text-[0.72rem] font-bold tracking-wider uppercase text-onkoz-text-muted">Salons Texte</span>
-        <button id="create-text-channel" title="Créer un salon texte" style="display:none"
-                class="w-6 h-6 flex items-center justify-center rounded text-onkoz-text-muted hover:text-onkoz-text hover:bg-onkoz-hover transition-colors text-lg font-light leading-none">
-          +
-        </button>
-      </div>
-      <ul id="text-channels" class="overflow-y-auto max-h-40"></ul>
-    </div>
+    <!-- Liste des canaux (catégories + salons + éphémères) -->
+    <div id="channel-list" class="flex-1 overflow-y-auto py-2 flex flex-col gap-0"></div>
 
-    <!-- Salons vocaux -->
-    <div class="py-3 border-b border-onkoz-border">
-      <div class="flex items-center justify-between px-3 mb-1">
-        <span class="text-[0.72rem] font-bold tracking-wider uppercase text-onkoz-text-muted">Salons Vocaux</span>
-        <button id="create-voice-channel" title="Créer un salon vocal" style="display:none"
-                class="w-6 h-6 flex items-center justify-center rounded text-onkoz-text-muted hover:text-onkoz-text hover:bg-onkoz-hover transition-colors text-lg font-light leading-none">
-          +
-        </button>
-      </div>
-      <ul id="voice-channels" class="overflow-y-auto max-h-40"></ul>
-    </div>
-
-    <!-- Salons éphémères -->
-    <div class="py-3 border-b border-onkoz-border">
-      <div class="flex items-center justify-between px-3 mb-1">
-        <span class="text-[0.72rem] font-bold tracking-wider uppercase text-onkoz-text-muted">Éphémères</span>
-        <button id="create-ephemeral" title="Créer un salon éphémère"
-                class="w-6 h-6 flex items-center justify-center rounded text-onkoz-text-muted hover:text-onkoz-text hover:bg-onkoz-hover transition-colors text-lg font-light leading-none">
-          +
-        </button>
-      </div>
-      <ul id="ephemeral-channels" class="overflow-y-auto max-h-40"></ul>
-    </div>
-
-    <!-- Footer utilisateur -->
-    <div class="mt-auto border-t border-onkoz-border p-2">
+    <!-- Footer user -->
+    <div class="border-t border-onkoz-border p-2 shrink-0">
       <div class="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-onkoz-hover transition-colors cursor-default">
-        <div id="footer-avatar"
-             class="w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm text-white shrink-0 uppercase">
-          ?
-        </div>
+        <div id="footer-avatar" class="w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm text-white shrink-0 uppercase">?</div>
         <div class="flex-1 min-w-0">
           <span id="footer-username" class="block text-sm font-semibold truncate"></span>
           <span id="footer-role" class="role-badge"></span>
         </div>
         <button id="btn-audio-settings" title="Paramètres audio"
-                class="w-7 h-7 flex items-center justify-center rounded text-onkoz-text-muted hover:bg-onkoz-hover hover:text-onkoz-text transition-colors text-sm">
-          🎛
+                class="w-7 h-7 flex items-center justify-center rounded text-onkoz-text-muted hover:bg-onkoz-hover hover:text-onkoz-text transition-colors">
+          <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" fill="currentColor" viewBox="0 0 16 16">
+            <path d="M11.5 2a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zM9.05 3a2.5 2.5 0 0 1 4.9 0H16v1h-2.05a2.5 2.5 0 0 1-4.9 0H0V3h9.05zM4.5 7a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zM2.05 8a2.5 2.5 0 0 1 4.9 0H16v1H6.95a2.5 2.5 0 0 1-4.9 0H0V8h2.05zm9.45 4a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zm-2.45 1a2.5 2.5 0 0 1 4.9 0H16v1h-2.05a2.5 2.5 0 0 1-4.9 0H0v-1h9.05z"/>
+          </svg>
         </button>
         <button id="logout-btn" title="Se déconnecter"
-                class="w-7 h-7 flex items-center justify-center rounded text-onkoz-text-muted hover:bg-onkoz-hover hover:text-onkoz-text transition-colors text-sm">
-          ⏏
-        </button>
+                class="w-7 h-7 flex items-center justify-center rounded text-onkoz-text-muted hover:bg-onkoz-hover hover:text-onkoz-text transition-colors text-sm">⏏</button>
       </div>
     </div>
   </aside>
 
-  <!-- ── ZONE CENTRALE ────────────────────────────────────────────────────── -->
+  <!-- ── ZONE CENTRALE ──────────────────────────────────────────────────── -->
   <main class="flex flex-col overflow-hidden bg-onkoz-bg">
 
     <!-- Header canal -->
-    <div class="flex items-center gap-2 px-4 h-12 border-b border-onkoz-border bg-onkoz-bg shrink-0 z-10">
+    <div class="flex items-center gap-2 px-4 h-12 border-b border-onkoz-border shrink-0">
       <span id="channel-icon" class="text-onkoz-text-muted text-lg">#</span>
       <span id="channel-name" class="font-bold text-[1rem]">Sélectionne un salon</span>
-      <div id="voice-controls" class="hidden items-center gap-2 ml-auto">
-        <button id="mute-btn" title="Muet / Non muet"
-                class="w-8 h-8 flex items-center justify-center rounded-full text-onkoz-text-muted hover:bg-onkoz-hover hover:text-onkoz-text transition-colors">
-          🎤
-        </button>
-        <button id="leave-voice-btn" title="Quitter le vocal"
-                class="w-8 h-8 flex items-center justify-center rounded-full text-onkoz-danger hover:bg-onkoz-danger/20 transition-colors">
-          📞
-        </button>
-      </div>
+      <span id="channel-category" class="text-[0.72rem] text-onkoz-text-muted ml-1"></span>
     </div>
 
-    <!-- Contenu -->
+    <!-- Contenu messages -->
     <div id="content-area" class="flex-1 overflow-y-auto p-4 flex flex-col gap-px">
       <div class="flex flex-col items-center justify-center flex-1 gap-3 text-onkoz-text-muted">
         <div class="text-6xl">🎤</div>
@@ -180,27 +120,37 @@
       </div>
     </div>
 
+    <!-- Barre vocale persistante (comme Discord) -->
+    <div id="voice-bar" class="hidden items-center justify-between px-4 py-2 bg-onkoz-success/10 border-t border-onkoz-success/30 shrink-0">
+      <div class="flex items-center gap-2">
+        <span class="w-2 h-2 rounded-full bg-onkoz-success animate-pulse shrink-0"></span>
+        <span class="text-xs text-onkoz-success font-semibold">Connecté dans</span>
+        <span id="voice-bar-name" class="text-xs font-bold text-onkoz-text"></span>
+      </div>
+      <div class="flex items-center gap-1">
+        <button id="voice-bar-mute" title="Muet"
+                class="w-7 h-7 flex items-center justify-center rounded text-onkoz-text-muted hover:bg-onkoz-hover hover:text-onkoz-text transition-colors text-sm">🎤</button>
+        <button id="voice-bar-leave" title="Quitter le vocal"
+                class="w-7 h-7 flex items-center justify-center rounded text-onkoz-danger hover:bg-onkoz-danger/20 transition-colors text-sm">📞</button>
+      </div>
+    </div>
+
     <!-- Input message -->
     <div id="message-input-area" class="px-4 py-3 border-t border-onkoz-border shrink-0" style="display:none">
       <div class="flex items-center gap-2 bg-onkoz-surface border border-onkoz-border rounded-md px-3 py-1.5">
         <input id="message-input" type="text" maxlength="2000" placeholder="Message..."
                class="flex-1 bg-transparent border-none outline-none text-onkoz-text placeholder:text-onkoz-text-muted text-sm" />
-        <button id="send-btn"
-                class="w-8 h-8 flex items-center justify-center bg-onkoz-accent hover:bg-onkoz-accent-dk text-white rounded-full transition-colors text-base shrink-0">
-          ↑
-        </button>
+        <button id="send-btn" class="w-8 h-8 flex items-center justify-center bg-onkoz-accent hover:bg-onkoz-accent-dk text-white rounded-full transition-colors text-base shrink-0">↑</button>
       </div>
     </div>
   </main>
 
-  <!-- ── SIDEBAR DROITE (membres) ─────────────────────────────────────────── -->
+  <!-- ── SIDEBAR DROITE (membres) ───────────────────────────────────────── -->
   <aside class="bg-onkoz-surface border-l border-onkoz-border overflow-y-auto py-3">
-    <div class="text-[0.7rem] font-bold tracking-widest uppercase text-onkoz-text-muted px-4 pb-2 border-b border-onkoz-border mb-2">
-      Membres
-    </div>
+    <div class="text-[0.7rem] font-bold tracking-widest uppercase text-onkoz-text-muted px-4 pb-2 border-b border-onkoz-border mb-2">Membres</div>
     <div>
       <div class="text-[0.68rem] font-bold tracking-wide uppercase text-onkoz-text-muted px-4 py-2">En ligne</div>
-      <ul id="online-users"  class="px-2"></ul>
+      <ul id="online-users" class="px-2"></ul>
     </div>
     <div class="mt-2">
       <div class="text-[0.68rem] font-bold tracking-wide uppercase text-onkoz-text-muted px-4 py-2">Hors ligne</div>
@@ -209,54 +159,61 @@
   </aside>
 </div>
 
-<!-- ══════════════════════════════════════════════════════════════════════════
-     PANEL DM
-     ══════════════════════════════════════════════════════════════════════════ -->
-<div id="dm-panel"
-     class="hidden fixed bottom-4 right-60 w-[340px] h-[440px] bg-onkoz-surface border border-onkoz-border rounded-xl shadow-dm flex flex-col z-50">
+<!-- ── DM PANEL ──────────────────────────────────────────────────────────── -->
+<div id="dm-panel" class="hidden fixed bottom-4 right-60 w-[340px] h-[440px] bg-onkoz-surface border border-onkoz-border rounded-xl shadow-dm flex flex-col z-50">
   <div class="flex items-center justify-between px-4 py-3 border-b border-onkoz-border text-sm shrink-0">
     <span class="text-onkoz-text-md">Message privé avec <strong id="dm-partner-name" class="text-onkoz-text font-semibold"></strong></span>
-    <button id="close-dm"
-            class="w-7 h-7 flex items-center justify-center rounded text-onkoz-text-muted hover:bg-onkoz-hover hover:text-onkoz-text transition-colors text-sm">✕</button>
+    <button id="close-dm" class="w-7 h-7 flex items-center justify-center rounded text-onkoz-text-muted hover:bg-onkoz-hover hover:text-onkoz-text transition-colors text-sm">✕</button>
   </div>
   <div id="dm-messages" class="flex-1 overflow-y-auto p-3 flex flex-col gap-1.5"></div>
   <div class="flex gap-2 p-2.5 border-t border-onkoz-border shrink-0">
     <input id="dm-input" type="text" maxlength="2000" placeholder="Message privé..."
-           class="flex-1 bg-onkoz-deep border border-onkoz-border rounded-md px-3 py-2 text-onkoz-text text-sm outline-none focus:border-onkoz-accent transition-colors" />
-    <button id="dm-send-btn"
-            class="w-8 h-8 flex items-center justify-center bg-onkoz-accent hover:bg-onkoz-accent-dk text-white rounded-full transition-colors shrink-0">↑</button>
+           class="flex-1 bg-onkoz-deep border border-onkoz-border rounded-md px-3 py-2 text-sm outline-none focus:border-onkoz-accent transition-colors" />
+    <button id="dm-send-btn" class="w-8 h-8 flex items-center justify-center bg-onkoz-accent hover:bg-onkoz-accent-dk text-white rounded-full transition-colors shrink-0">↑</button>
   </div>
 </div>
 
-<!-- ══════════════════════════════════════════════════════════════════════════
-     MODAL
-     ══════════════════════════════════════════════════════════════════════════ -->
+<!-- ── MODAL Salon / Catégorie ───────────────────────────────────────────── -->
 <div id="modal-overlay" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-[200]">
   <div class="bg-onkoz-surface border border-onkoz-border rounded-xl p-6 w-80 flex flex-col gap-4 shadow-dm">
     <h3 id="modal-title" class="font-bold text-lg text-onkoz-text"></h3>
-    <input id="modal-channel-name" type="text" maxlength="32" placeholder="nom-du-salon"
-           class="bg-onkoz-deep border border-onkoz-border rounded-md px-3 py-2.5 text-onkoz-text outline-none focus:border-onkoz-accent transition-colors" />
+    <input id="modal-channel-name" type="text" maxlength="32" placeholder="Nom..."
+           class="bg-onkoz-deep border border-onkoz-border rounded-md px-3 py-2.5 outline-none focus:border-onkoz-accent transition-colors" />
+
+    <!-- Type salon -->
+    <div id="modal-type-opts" class="hidden flex gap-2">
+      <button class="type-btn flex-1 py-2 rounded-md border text-sm font-medium transition-colors" data-type="text"
+              class="border-onkoz-border text-onkoz-text-md hover:bg-onkoz-hover"># Texte</button>
+      <button class="type-btn flex-1 py-2 rounded-md border text-sm font-medium transition-colors" data-type="voice"
+              class="border-onkoz-border text-onkoz-text-md hover:bg-onkoz-hover">🔊 Vocal</button>
+    </div>
+
+    <!-- Catégorie cible -->
+    <div id="modal-category-opts" class="hidden flex-col gap-1.5">
+      <label class="text-[0.72rem] font-bold uppercase tracking-wider text-onkoz-text-muted">Catégorie</label>
+      <select id="modal-category-select"
+              class="bg-onkoz-deep border border-onkoz-border rounded-md px-2.5 py-2 text-sm outline-none focus:border-onkoz-accent transition-colors cursor-pointer">
+        <option value="">— Aucune catégorie —</option>
+      </select>
+    </div>
+
+    <!-- Éphémère texte -->
     <div id="modal-ephemeral-opts" class="hidden">
       <label class="flex items-center gap-2 text-sm text-onkoz-text-md cursor-pointer">
         <input id="eph-with-text" type="checkbox" class="accent-onkoz-accent" />
         Ajouter un salon texte éphémère
       </label>
     </div>
+
     <div class="flex gap-2 justify-end">
-      <button id="modal-cancel"
-              class="px-4 py-2 rounded-md border border-onkoz-border text-onkoz-text-md hover:bg-onkoz-hover transition-colors text-sm font-medium">
-        Annuler
-      </button>
-      <button id="modal-confirm"
-              class="px-4 py-2 rounded-md bg-onkoz-accent hover:bg-onkoz-accent-dk text-white font-semibold text-sm transition-colors">
-        Créer
-      </button>
+      <button id="modal-cancel" class="px-4 py-2 rounded-md border border-onkoz-border text-onkoz-text-md hover:bg-onkoz-hover transition-colors text-sm font-medium">Annuler</button>
+      <button id="modal-confirm" class="px-4 py-2 rounded-md bg-onkoz-accent hover:bg-onkoz-accent-dk text-white font-semibold text-sm transition-colors">Créer</button>
     </div>
   </div>
 </div>
 
 <script src="/socket.io/socket.io.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/mediasoup-client@3/dist/mediasoup-client.min.js"></script>
+<script src="/js/mediasoup-client.min.js"></script>
 <script src="/js/api.js"></script>
 <script src="/js/auth.js"></script>
 <script src="/js/ui.js"></script>

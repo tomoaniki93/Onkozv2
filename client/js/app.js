@@ -1,7 +1,12 @@
 /* ── App — Orchestrateur principal ───────────────────────────────────────── */
 const App = (() => {
-  let socket = null, channels = [], allUsers = [], ephemeralList = [];
+  let socket = null;
+  let allUsers = [];
+  let cats = [];           // { id, name, position, channels: [] }
+  let uncategorized = [];  // channels sans catégorie
+  let presence = {};       // { 'text:channelId': [{userId, username}], 'voice:channelId': [...] }
 
+  // ── Bootstrap ─────────────────────────────────────────────────────────────
   async function launch() {
     const user = Auth.getUser();
     if (!user) return;
@@ -13,149 +18,404 @@ const App = (() => {
 
     UI.renderFooterUser(user);
 
-    if (Auth.isAdmin()) {
-      document.getElementById('create-text-channel').style.display  = 'flex';
-      document.getElementById('create-voice-channel').style.display = 'flex';
-    }
-
-    [channels, allUsers] = await Promise.all([API.getChannels(), API.getUsers()]);
+    [{ categories: cats, uncategorized }, allUsers] = await Promise.all([
+      API.getCategories(), API.getUsers(),
+    ]);
     UI.setUsers(allUsers);
-    renderChannels();
+    renderSidebar();
     connectSocket(user);
   }
 
+  // ── Socket ────────────────────────────────────────────────────────────────
   function connectSocket(user) {
     socket = io({ auth: { token: API.getToken() } });
     Voice.init(socket);
     Chat.init(socket);
 
-    socket.on('online:list',   ids  => UI.setOnline(ids));
-    socket.on('user:online',   ({ userId }) => UI.setUserOnline(userId));
-    socket.on('user:offline',  ({ userId }) => UI.setUserOffline(userId));
-    socket.on('chat:message',  msg  => Chat.onMessage(msg));
-    socket.on('chat:deleted',  data => Chat.onDeleted(data));
-    socket.on('dm:message',    msg  => Chat.onDMMessage(msg));
+    socket.on('online:list',       ids  => UI.setOnline(ids));
+    socket.on('user:online',       ({ userId }) => UI.setUserOnline(userId));
+    socket.on('user:offline',      ({ userId }) => UI.setUserOffline(userId));
+    socket.on('chat:message',      msg  => Chat.onMessage(msg));
+    socket.on('chat:deleted',      data => Chat.onDeleted(data));
+    socket.on('dm:message',        msg  => Chat.onDMMessage(msg));
     socket.on('voice:peer:joined', data => Voice.onPeerJoined(data));
     socket.on('voice:peer:left',   data => Voice.onPeerLeft(data));
     socket.on('voice:peers',       peers => Voice.onExistingPeers(peers));
-    socket.on('voice:members', ({ channelId, members }) => updateVoiceMemberCount(channelId, members.length));
-    socket.on('ephemeral:list',    list => { ephemeralList = list; renderEphemeralChannels(); });
+    socket.on('kicked', () => { alert('Vous avez été expulsé.'); API.clearToken(); location.reload(); });
+
+    // Présence texte et vocal
+    socket.on('text:viewers', ({ channelId, members }) => {
+      presence[`text:${channelId}`] = members;
+      updateChannelPresence(channelId, 'text', members);
+    });
+    socket.on('voice:members', ({ channelId, members }) => {
+      presence[`voice:${channelId}`] = members;
+      updateChannelPresence(channelId, 'voice', members);
+    });
+
+    // Éphémères
+    socket.on('ephemeral:list', list => renderEphemeralSection(list));
     socket.on('ephemeral:created', ({ eid, voiceName, withText }) => {
       socket.emit('ephemeral:join', { eid });
       Voice.joinRoom(eid, 'ephemeral', `ephemeral:${eid}`, voiceName);
-      document.getElementById('channel-name').textContent = voiceName;
-      document.getElementById('channel-icon').textContent = '✨';
-      if (withText) setupEphemeralText(eid);
-    });
-    socket.on('kicked', () => { alert('Vous avez été expulsé.'); API.clearToken(); location.reload(); });
-  }
-
-  // ── Canaux ────────────────────────────────────────────────────────────────
-  function renderChannels() {
-    document.getElementById('text-channels').innerHTML  = '';
-    document.getElementById('voice-channels').innerHTML = '';
-    channels.forEach(ch => {
-      const li = createChannelItem(ch);
-      document.getElementById(ch.type === 'text' ? 'text-channels' : 'voice-channels').appendChild(li);
+      setChannelHeader('✨', voiceName, '');
+      showVoiceBar(voiceName);
+      if (withText) Chat.setupEphemeralText(socket, eid);
     });
   }
 
-  function createChannelItem(ch) {
-    const li = document.createElement('li');
-    li.className = 'channel-item flex items-center gap-2 px-3 py-1.5 mx-1.5 rounded-md text-onkoz-text-md hover:bg-onkoz-hover hover:text-onkoz-text cursor-pointer transition-colors text-[0.9rem] group';
-    li.dataset.id   = ch.id;
-    li.dataset.type = ch.type;
+  // ── Sidebar ───────────────────────────────────────────────────────────────
+  function renderSidebar() {
+    const list = document.getElementById('channel-list');
+    list.innerHTML = '';
 
-    const icon = document.createElement('span');
-    icon.className = 'text-[0.85rem] shrink-0';
-    icon.textContent = ch.type === 'text' ? '#' : '🔊';
+    const canManage = Auth.isAdmin() || Auth.isMod();
+
+    // ── Bouton "Nouvelle catégorie" ──
+    if (canManage) {
+      const addCat = document.createElement('button');
+      addCat.className = 'mx-3 mt-1 mb-2 flex items-center gap-1.5 text-[0.72rem] font-bold text-onkoz-text-muted hover:text-onkoz-text transition-colors';
+      addCat.innerHTML = `<span class="text-base font-light leading-none">+</span> Nouvelle catégorie`;
+      addCat.addEventListener('click', createCategory);
+      list.appendChild(addCat);
+    }
+
+    // ── Catégories ──
+    cats.forEach(cat => {
+      list.appendChild(renderCategorySection(cat, canManage));
+    });
+
+    // ── Salons sans catégorie ──
+    if (uncategorized.length > 0 || canManage) {
+      list.appendChild(renderUncategorizedSection(canManage));
+    }
+
+    // ── Éphémères ──
+    list.appendChild(renderEphemeralHeader());
+  }
+
+  function renderCategorySection(cat, canManage) {
+    const section = document.createElement('div');
+    section.dataset.catId = cat.id;
+    section.className = 'mb-1';
+
+    // Header catégorie
+    const header = document.createElement('div');
+    header.className = 'flex items-center gap-1 px-2 py-1 group cursor-pointer select-none';
+
+    const arrow = document.createElement('span');
+    arrow.className = 'text-[0.6rem] text-onkoz-text-muted transition-transform';
+    arrow.textContent = '▼';
 
     const name = document.createElement('span');
-    name.className = 'flex-1 truncate';
-    name.textContent = ch.name;
+    name.className = 'flex-1 text-[0.72rem] font-bold tracking-wider uppercase text-onkoz-text-muted truncate hover:text-onkoz-text transition-colors';
+    name.textContent = cat.name;
 
-    li.append(icon, name);
+    header.append(arrow, name);
 
-    if (ch.type === 'voice') {
-      const count = document.createElement('span');
-      count.id = `vc-count-${ch.id}`;
-      count.className = 'text-[0.7rem] text-onkoz-text-muted bg-onkoz-hover rounded-full px-1.5 hidden';
-      li.append(count);
+    if (canManage) {
+      // Bouton ajouter salon dans catégorie
+      const addBtn = document.createElement('button');
+      addBtn.className = 'hidden group-hover:flex w-5 h-5 items-center justify-center rounded text-onkoz-text-muted hover:text-onkoz-text hover:bg-onkoz-hover transition-colors text-sm shrink-0';
+      addBtn.textContent = '+';
+      addBtn.title = 'Ajouter un salon';
+      addBtn.addEventListener('click', e => { e.stopPropagation(); createChannelInCategory(cat.id); });
+
+      // Bouton supprimer catégorie
+      const delBtn = document.createElement('button');
+      delBtn.className = 'hidden group-hover:flex w-5 h-5 items-center justify-center rounded text-onkoz-text-muted hover:text-onkoz-danger hover:bg-onkoz-danger/15 transition-colors text-xs shrink-0';
+      delBtn.textContent = '✕';
+      delBtn.title = 'Supprimer la catégorie';
+      delBtn.addEventListener('click', e => { e.stopPropagation(); deleteCategory(cat.id); });
+
+      header.append(addBtn, delBtn);
     }
 
-    if (Auth.isAdmin()) {
-      const del = document.createElement('button');
-      del.className = 'hidden group-hover:flex items-center justify-center w-5 h-5 rounded text-onkoz-danger hover:bg-onkoz-danger/20 text-xs shrink-0 transition-colors';
-      del.textContent = '✕';
-      del.title = 'Supprimer';
-      del.addEventListener('click', e => { e.stopPropagation(); deleteChannel(ch.id); });
-      li.append(del);
-    }
+    // Canal list
+    const channelList = document.createElement('ul');
+    channelList.id = `cat-channels-${cat.id}`;
+    channelList.className = 'flex flex-col';
 
-    li.addEventListener('click', () => selectChannel(ch));
-    return li;
+    cat.channels.forEach(ch => channelList.appendChild(createChannelItem(ch)));
+
+    // Toggle collapse
+    let collapsed = false;
+    header.addEventListener('click', () => {
+      collapsed = !collapsed;
+      arrow.style.transform = collapsed ? 'rotate(-90deg)' : '';
+      channelList.classList.toggle('hidden', collapsed);
+    });
+
+    section.append(header, channelList);
+    return section;
   }
 
-  function renderEphemeralChannels() {
+  function renderUncategorizedSection(canManage) {
+    const section = document.createElement('div');
+    section.id = 'uncategorized-section';
+    section.className = 'mb-1';
+
+    const header = document.createElement('div');
+    header.className = 'flex items-center gap-1 px-2 py-1 group cursor-pointer select-none';
+
+    const arrow = document.createElement('span');
+    arrow.className = 'text-[0.6rem] text-onkoz-text-muted transition-transform';
+    arrow.textContent = '▼';
+
+    const name = document.createElement('span');
+    name.className = 'flex-1 text-[0.72rem] font-bold tracking-wider uppercase text-onkoz-text-muted';
+    name.textContent = 'Général';
+
+    header.append(arrow, name);
+
+    if (canManage) {
+      const addBtn = document.createElement('button');
+      addBtn.className = 'hidden group-hover:flex w-5 h-5 items-center justify-center rounded text-onkoz-text-muted hover:text-onkoz-text hover:bg-onkoz-hover transition-colors text-sm shrink-0';
+      addBtn.textContent = '+';
+      addBtn.title = 'Ajouter un salon';
+      addBtn.addEventListener('click', e => { e.stopPropagation(); createChannelInCategory(null); });
+      header.append(addBtn);
+    }
+
+    const channelList = document.createElement('ul');
+    channelList.id = 'uncategorized-channels';
+    channelList.className = 'flex flex-col';
+    uncategorized.forEach(ch => channelList.appendChild(createChannelItem(ch)));
+
+    let collapsed = false;
+    header.addEventListener('click', () => {
+      collapsed = !collapsed;
+      arrow.style.transform = collapsed ? 'rotate(-90deg)' : '';
+      channelList.classList.toggle('hidden', collapsed);
+    });
+
+    section.append(header, channelList);
+    return section;
+  }
+
+  function renderEphemeralHeader() {
+    const section = document.createElement('div');
+    section.id = 'ephemeral-section';
+    section.className = 'mt-1 border-t border-onkoz-border pt-1';
+
+    const header = document.createElement('div');
+    header.className = 'flex items-center gap-1 px-2 py-1';
+
+    const name = document.createElement('span');
+    name.className = 'flex-1 text-[0.72rem] font-bold tracking-wider uppercase text-onkoz-text-muted';
+    name.textContent = 'Éphémères';
+
+    const addBtn = document.createElement('button');
+    addBtn.className = 'w-5 h-5 flex items-center justify-center rounded text-onkoz-text-muted hover:text-onkoz-text hover:bg-onkoz-hover transition-colors text-sm';
+    addBtn.textContent = '+';
+    addBtn.title = 'Créer un salon éphémère';
+    addBtn.addEventListener('click', createEphemeral);
+
+    header.append(name, addBtn);
+
+    const list = document.createElement('ul');
+    list.id = 'ephemeral-channels';
+    list.className = 'flex flex-col';
+
+    section.append(header, list);
+    return section;
+  }
+
+  function renderEphemeralSection(ephemerals) {
     const list = document.getElementById('ephemeral-channels');
+    if (!list) return;
     list.innerHTML = '';
-    ephemeralList.forEach(eph => {
+    ephemerals.forEach(eph => {
       const li = document.createElement('li');
-      li.className = 'flex items-center gap-2 px-3 py-1.5 mx-1.5 rounded-md text-onkoz-text-md hover:bg-onkoz-hover hover:text-onkoz-text cursor-pointer transition-colors text-[0.9rem]';
-      li.innerHTML = `<span class="shrink-0">✨</span><span class="flex-1 truncate">${eph.voiceName}</span><span class="text-[0.7rem] text-onkoz-text-muted bg-onkoz-hover rounded-full px-1.5">${eph.memberCount}</span>`;
+      li.className = 'channel-item flex flex-col px-3 py-1 mx-1 rounded-md text-onkoz-text-md hover:bg-onkoz-hover hover:text-onkoz-text cursor-pointer transition-colors text-[0.88rem]';
+
+      const row = document.createElement('div');
+      row.className = 'flex items-center gap-1.5';
+      row.innerHTML = `<span class="shrink-0 text-sm">✨</span><span class="flex-1 truncate">${eph.voiceName}</span><span class="text-[0.7rem] text-onkoz-text-muted">${eph.memberCount}</span>`;
+
+      // Présence membres
+      if (eph.members?.length) {
+        const presEl = document.createElement('div');
+        presEl.className = 'flex flex-wrap gap-0.5 mt-0.5 pl-5';
+        eph.members.slice(0, 5).forEach(m => {
+          const span = document.createElement('span');
+          span.className = 'text-[0.65rem] text-onkoz-success';
+          span.textContent = m.username;
+          presEl.appendChild(span);
+          if (eph.members.indexOf(m) < eph.members.length - 1 && eph.members.indexOf(m) < 4) {
+            presEl.appendChild(document.createTextNode(', '));
+          }
+        });
+        li.append(row, presEl);
+      } else {
+        li.appendChild(row);
+      }
+
       li.addEventListener('click', () => {
         socket.emit('ephemeral:join', { eid: eph.id });
         Voice.joinRoom(eph.id, 'ephemeral', `ephemeral:${eph.id}`, eph.voiceName);
-        document.getElementById('channel-name').textContent = eph.voiceName;
-        document.getElementById('channel-icon').textContent = '✨';
-        if (eph.withText) setupEphemeralText(eph.id);
+        setChannelHeader('✨', eph.voiceName, '');
+        showVoiceBar(eph.voiceName);
+        if (eph.withText) Chat.setupEphemeralText(socket, eph.id);
       });
+
       list.appendChild(li);
     });
   }
 
-  function selectChannel(ch) {
-    document.querySelectorAll('.channel-item').forEach(el => {
-      el.classList.remove('bg-onkoz-active', 'text-onkoz-text');
-      el.classList.add('text-onkoz-text-md');
-    });
-    const active = document.querySelector(`[data-id="${ch.id}"]`);
-    if (active) {
-      active.classList.add('bg-onkoz-active', 'text-onkoz-text');
-      active.classList.remove('text-onkoz-text-md');
+  // ── Créer item salon ──────────────────────────────────────────────────────
+  function createChannelItem(ch) {
+    const li = document.createElement('li');
+    li.id = `ch-item-${ch.id}`;
+    li.dataset.id   = ch.id;
+    li.dataset.type = ch.type;
+    li.className = 'channel-item flex flex-col px-3 py-1 mx-1 rounded-md cursor-pointer transition-colors group text-onkoz-text-md hover:bg-onkoz-hover hover:text-onkoz-text';
+
+    const row = document.createElement('div');
+    row.className = 'flex items-center gap-1.5';
+
+    const icon = document.createElement('span');
+    icon.className = 'text-[0.85rem] shrink-0 text-onkoz-text-muted group-hover:text-onkoz-text';
+    icon.textContent = ch.type === 'text' ? '#' : '🔊';
+
+    const nameSp = document.createElement('span');
+    nameSp.className = 'flex-1 truncate text-[0.88rem]';
+    nameSp.textContent = ch.name;
+
+    row.append(icon, nameSp);
+
+    // Bouton supprimer (admin/mod)
+    const canManage = Auth.isAdmin() || Auth.isMod();
+    if (canManage) {
+      const del = document.createElement('button');
+      del.className = 'hidden group-hover:flex w-4 h-4 items-center justify-center rounded text-onkoz-danger hover:bg-onkoz-danger/20 text-xs shrink-0 transition-colors';
+      del.textContent = '✕';
+      del.addEventListener('click', e => { e.stopPropagation(); deleteChannel(ch.id); });
+      row.appendChild(del);
     }
 
-    document.getElementById('channel-icon').textContent = ch.type === 'text' ? '#' : '🔊';
-    document.getElementById('channel-name').textContent = ch.name;
+    // Zone présence (sous le nom)
+    const presenceEl = document.createElement('div');
+    presenceEl.id = `ch-presence-${ch.id}`;
+    presenceEl.className = 'pl-5 flex flex-wrap gap-x-1';
+
+    li.append(row, presenceEl);
+    li.addEventListener('click', () => selectChannel(ch));
+    return li;
+  }
+
+  // ── Présence sous les salons ──────────────────────────────────────────────
+  function updateChannelPresence(channelId, type, members) {
+    const el = document.getElementById(`ch-presence-${channelId}`);
+    if (!el) return;
+    el.innerHTML = '';
+    if (!members?.length) return;
+
+    const color  = type === 'voice' ? 'text-onkoz-success' : 'text-onkoz-text-muted';
+    const prefix = type === 'voice' ? '🎤 ' : '👁 ';
+
+    const text = document.createElement('span');
+    text.className = `text-[0.65rem] ${color} truncate`;
+    text.textContent = prefix + members.map(m => m.username).join(', ');
+    el.appendChild(text);
+  }
+
+  // ── Sélectionner un salon ─────────────────────────────────────────────────
+  function selectChannel(ch) {
+    // Highlight
+    document.querySelectorAll('.channel-item').forEach(el => {
+      el.classList.remove('bg-onkoz-active', 'text-onkoz-text');
+    });
+    document.getElementById(`ch-item-${ch.id}`)?.classList.add('bg-onkoz-active', 'text-onkoz-text');
+
+    // Catégorie dans le header
+    const catName = findCategoryOfChannel(ch.id)?.name || '';
+    setChannelHeader(ch.type === 'text' ? '#' : '🔊', ch.name, catName);
 
     if (ch.type === 'text') {
-      if (Voice.getCurrentRoomId()?.startsWith('voice:')) Voice.leaveRoom();
+      // Ne quitte PAS le vocal (comme Discord)
+      document.getElementById('message-input-area').style.display = 'block';
       Chat.joinTextChannel(ch.id, ch.name);
     } else {
       document.getElementById('message-input-area').style.display = 'none';
       socket.emit('voice:join', { channelId: ch.id });
       Voice.joinRoom(ch.id, 'permanent', `voice:${ch.id}`, ch.name);
+      showVoiceBar(ch.name);
     }
   }
 
-  function updateVoiceMemberCount(channelId, count) {
-    const el = document.getElementById(`vc-count-${channelId}`);
-    if (!el) return;
-    if (count > 0) { el.textContent = count; el.classList.remove('hidden'); }
-    else el.classList.add('hidden');
+  function setChannelHeader(icon, name, category) {
+    document.getElementById('channel-icon').textContent = icon;
+    document.getElementById('channel-name').textContent = name;
+    document.getElementById('channel-category').textContent = category ? `— ${category}` : '';
   }
 
-  // ── Créer / Supprimer salon ───────────────────────────────────────────────
-  async function createChannel(type) {
-    const result = await UI.openModal(`Créer un salon ${type === 'text' ? 'texte' : 'vocal'}`, {
-      placeholder: type === 'text' ? 'general' : 'vocal-general',
+  function findCategoryOfChannel(chId) {
+    for (const cat of cats) {
+      if (cat.channels.find(c => c.id === chId)) return cat;
+    }
+    return null;
+  }
+
+  // ── Barre vocale persistante ───────────────────────────────────────────────
+  function showVoiceBar(channelName) {
+    const bar = document.getElementById('voice-bar');
+    bar.classList.remove('hidden');
+    bar.classList.add('flex');
+    document.getElementById('voice-bar-name').textContent = channelName;
+  }
+
+  function hideVoiceBar() {
+    const bar = document.getElementById('voice-bar');
+    bar.classList.add('hidden');
+    bar.classList.remove('flex');
+  }
+
+  // ── Créer catégorie ───────────────────────────────────────────────────────
+  async function createCategory() {
+    const result = await UI.openModal('Nouvelle catégorie', { placeholder: 'NOM CATÉGORIE', mode: 'category' });
+    if (!result) return;
+    try {
+      const cat = await API.createCategory(result.name);
+      cat.channels = [];
+      cats.push(cat);
+      renderSidebar();
+      AudioSettings.showToast(`✅ Catégorie "${cat.name}" créée`);
+    } catch (e) { alert(e.message); }
+  }
+
+  async function deleteCategory(id) {
+    if (!confirm('Supprimer cette catégorie ? Les salons seront déplacés dans "Général".')) return;
+    try {
+      await API.deleteCategory(id);
+      // Récupérer les salons de la catégorie supprimée → les mettre dans uncategorized
+      const cat = cats.find(c => c.id === id);
+      if (cat) uncategorized.push(...cat.channels.map(ch => ({ ...ch, category_id: null })));
+      cats = cats.filter(c => c.id !== id);
+      renderSidebar();
+    } catch (e) { alert(e.message); }
+  }
+
+  // ── Créer salon ───────────────────────────────────────────────────────────
+  async function createChannelInCategory(categoryId) {
+    const result = await UI.openModal('Nouveau salon', {
+      placeholder: 'nom-du-salon',
+      mode: 'channel',
+      categories: cats,
+      defaultCategoryId: categoryId,
     });
     if (!result) return;
     try {
-      const ch = await API.createChannel(result.name, type);
-      channels.push(ch);
-      const li = createChannelItem(ch);
-      document.getElementById(type === 'text' ? 'text-channels' : 'voice-channels').appendChild(li);
+      const ch = await API.createChannelInCategory(result.name, result.type, result.categoryId || null);
+      // Ajouter localement
+      if (result.categoryId) {
+        const cat = cats.find(c => c.id == result.categoryId);
+        if (cat) cat.channels.push(ch);
+      } else {
+        uncategorized.push(ch);
+      }
+      renderSidebar();
+      AudioSettings.showToast(`✅ Salon "${ch.name}" créé`);
     } catch (e) { alert(e.message); }
   }
 
@@ -163,52 +423,17 @@ const App = (() => {
     if (!confirm('Supprimer ce salon ?')) return;
     try {
       await API.deleteChannel(id);
-      channels = channels.filter(c => c.id !== id);
-      document.querySelector(`[data-id="${id}"]`)?.remove();
+      cats.forEach(cat => { cat.channels = cat.channels.filter(c => c.id !== id); });
+      uncategorized = uncategorized.filter(c => c.id !== id);
+      renderSidebar();
     } catch (e) { alert(e.message); }
   }
 
-  // ── Éphémère ─────────────────────────────────────────────────────────────
+  // ── Créer éphémère ────────────────────────────────────────────────────────
   async function createEphemeral() {
-    const result = await UI.openModal('Créer un salon éphémère', {
-      placeholder: 'Mon salon', ephemeral: true,
-    });
+    const result = await UI.openModal('Salon éphémère', { placeholder: 'Mon salon', mode: 'ephemeral' });
     if (!result) return;
     socket.emit('ephemeral:create', { voiceName: result.name, withText: result.withText });
-  }
-
-  function setupEphemeralText(eid) {
-    document.getElementById('message-input-area').style.display = 'block';
-    const input   = document.getElementById('message-input').cloneNode(true);
-    const sendBtn = document.getElementById('send-btn').cloneNode(true);
-    document.getElementById('message-input').replaceWith(input);
-    document.getElementById('send-btn').replaceWith(sendBtn);
-
-    const doSend = () => {
-      const c = input.value.trim();
-      if (!c) return;
-      socket.emit('ephemeral:message', { eid, content: c });
-      input.value = '';
-    };
-    sendBtn.addEventListener('click', doSend);
-    input.addEventListener('keydown', e => { if (e.key === 'Enter') doSend(); });
-
-    socket.on('ephemeral:message', ({ eid: msgEid, username, role, content }) => {
-      if (msgEid !== eid) return;
-      const vr = document.querySelector('.voice-room-display') || document.getElementById('content-area').firstElementChild;
-      if (!vr) return;
-      let chat = document.getElementById('eph-chat');
-      if (!chat) {
-        chat = document.createElement('div');
-        chat.id = 'eph-chat';
-        chat.className = 'mt-4 w-full max-w-lg max-h-48 overflow-y-auto bg-onkoz-surface rounded-xl p-3 flex flex-col gap-1';
-        document.getElementById('content-area').firstElementChild?.appendChild(chat);
-      }
-      const msg = document.createElement('div');
-      msg.innerHTML = `<span class="msg-author font-bold text-sm ${role}">${username}</span> <span class="text-sm text-onkoz-text">${content}</span>`;
-      chat.appendChild(msg);
-      chat.scrollTop = chat.scrollHeight;
-    });
   }
 
   // ── Modération ────────────────────────────────────────────────────────────
@@ -238,21 +463,15 @@ const App = (() => {
     badge.textContent = (parseInt(badge.textContent) || 0) + 1;
   }
 
+  // ── Bind events ───────────────────────────────────────────────────────────
   function bindEvents() {
-    document.getElementById('create-text-channel').addEventListener('click',  () => createChannel('text'));
-    document.getElementById('create-voice-channel').addEventListener('click', () => createChannel('voice'));
-    document.getElementById('create-ephemeral').addEventListener('click',     () => createEphemeral());
-    document.getElementById('mute-btn').addEventListener('click',       () => Voice.toggleMute());
-    document.getElementById('leave-voice-btn').addEventListener('click', () => Voice.leaveRoom());
-
-    const msgInput = document.getElementById('message-input');
+    document.getElementById('voice-bar-mute').addEventListener('click',  () => Voice.toggleMute());
+    document.getElementById('voice-bar-leave').addEventListener('click', () => { Voice.leaveRoom(); hideVoiceBar(); });
     document.getElementById('send-btn').addEventListener('click', () => Chat.sendMessage());
-    msgInput.addEventListener('keydown', e => { if (e.key === 'Enter') Chat.sendMessage(); });
-
+    document.getElementById('message-input').addEventListener('keydown', e => { if (e.key === 'Enter') Chat.sendMessage(); });
     document.getElementById('dm-send-btn').addEventListener('click', () => Chat.sendDM());
     document.getElementById('dm-input').addEventListener('keydown', e => { if (e.key === 'Enter') Chat.sendDM(); });
     document.getElementById('close-dm').addEventListener('click', () => Chat.closeDM());
-
     document.getElementById('btn-audio-settings').addEventListener('click', () => AudioSettings.toggle());
   }
 

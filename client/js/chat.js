@@ -155,5 +155,38 @@ const Chat = (() => {
     dmPartnerId = dmPartnerName = null;
   }
 
-  return { init, joinTextChannel, onMessage, onDeleted, sendMessage, openDM, onDMMessage, sendDM, closeDM };
+  // ── Texte éphémère ────────────────────────────────────────────────────────
+  function setupEphemeralText(socket, eid) {
+    document.getElementById('message-input-area').style.display = 'block';
+    const input = document.getElementById('message-input');
+    const sendBtn = document.getElementById('send-btn');
+
+    const doSend = () => {
+      const c = input.value.trim();
+      if (!c) return;
+      socket.emit('ephemeral:message', { eid, content: c });
+      input.value = '';
+    };
+
+    sendBtn.onclick = doSend;
+    input.onkeydown = e => { if (e.key === 'Enter') doSend(); };
+
+    socket.on('ephemeral:message', ({ eid: msgEid, username, role, content }) => {
+      if (msgEid !== eid) return;
+      const area = document.getElementById('content-area');
+      let chat = document.getElementById('eph-chat');
+      if (!chat) {
+        chat = document.createElement('div');
+        chat.id = 'eph-chat';
+        chat.className = 'mt-4 w-full max-w-lg max-h-48 overflow-y-auto bg-onkoz-surface rounded-xl p-3 flex flex-col gap-1';
+        area.appendChild(chat);
+      }
+      const msg = document.createElement('div');
+      msg.innerHTML = `<span class="msg-author font-bold text-sm ${role}">${username}</span> <span class="text-sm text-onkoz-text">${content}</span>`;
+      chat.appendChild(msg);
+      chat.scrollTop = chat.scrollHeight;
+    });
+  }
+
+  return { init, joinTextChannel, onMessage, onDeleted, sendMessage, openDM, onDMMessage, sendDM, closeDM, setupEphemeralText };
 })();
