@@ -252,6 +252,8 @@ const App = (() => {
     document.getElementById('dm-send-btn').addEventListener('click', () => Chat.sendDM());
     document.getElementById('dm-input').addEventListener('keydown', e => { if (e.key === 'Enter') Chat.sendDM(); });
     document.getElementById('close-dm').addEventListener('click', () => Chat.closeDM());
+
+    document.getElementById('btn-audio-settings').addEventListener('click', () => AudioSettings.toggle());
   }
 
   return { launch, kickUser, changeRole, showUnreadBadge, bindEvents };

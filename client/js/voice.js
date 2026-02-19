@@ -14,7 +14,11 @@ const Voice = (() => {
     renderVoiceRoom(channelName);
 
     try {
-      localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      const micId = AudioSettings.getMicId();
+      localStream = await navigator.mediaDevices.getUserMedia({
+        audio: micId && micId !== 'default' ? { deviceId: { exact: micId } } : true,
+        video: false
+      });
       device = new mediasoupClient.Device();
 
       const { caps } = await socketEmit('ms:getRouterCapabilities', { roomId });

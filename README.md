@@ -175,7 +175,7 @@ onkoz/
 | WebRTC SFU | mediasoup 3 |
 | Base de données | SQLite (better-sqlite3) |
 | Authentification | JWT (jsonwebtoken) + bcryptjs |
-| Frontend | Vanilla JS + Tailwind CSS v3 |
+| Frontend | Vanilla JS + CSS (pas de framework) |
 | Client WebRTC | mediasoup-client (CDN) |
 | Reverse Proxy | Nginx |
 | Process Manager | systemd |
