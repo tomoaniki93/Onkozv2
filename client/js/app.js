@@ -284,14 +284,15 @@ const App = (() => {
 
     row.append(icon, nameSp);
 
-    // Bouton supprimer (admin/mod)
+    // Bouton options (admin/mod)
     const canManage = Auth.isAdmin() || Auth.isMod();
     if (canManage) {
-      const del = document.createElement('button');
-      del.className = 'hidden group-hover:flex w-4 h-4 items-center justify-center rounded text-onkoz-danger hover:bg-onkoz-danger/20 text-xs shrink-0 transition-colors';
-      del.textContent = '✕';
-      del.addEventListener('click', e => { e.stopPropagation(); deleteChannel(ch.id); });
-      row.appendChild(del);
+      const optBtn = document.createElement('button');
+      optBtn.className = 'hidden group-hover:flex w-6 h-6 items-center justify-center rounded text-onkoz-text-muted hover:bg-onkoz-hover hover:text-onkoz-text text-base shrink-0 transition-colors font-bold';
+      optBtn.textContent = '⋮';
+      optBtn.title = 'Options';
+      optBtn.addEventListener('click', e => { e.stopPropagation(); openChannelMenu(e, ch); });
+      row.appendChild(optBtn);
     }
 
     // Zone présence (sous le nom)
@@ -417,6 +418,141 @@ const App = (() => {
       renderSidebar();
       AudioSettings.showToast(`✅ Salon "${ch.name}" créé`);
     } catch (e) { alert(e.message); }
+  }
+
+  // ── Menu options salon ────────────────────────────────────────────────────
+  function openChannelMenu(e, ch) {
+    // Fermer tout menu existant
+    document.getElementById('channel-ctx-menu')?.remove();
+
+    const menu = document.createElement('div');
+    menu.id = 'channel-ctx-menu';
+    menu.className = 'fixed z-[300] bg-onkoz-surface border border-onkoz-border rounded-lg shadow-dm py-1 w-52 text-sm';
+
+    // Position sous le bouton ⋮
+    const rect = e.currentTarget.getBoundingClientRect();
+    menu.style.top  = `${rect.bottom + 4}px`;
+    menu.style.left = `${rect.left - 170}px`;
+
+    const menuItems = [];
+
+    // ── Gérer les modérateurs (admin seulement) ──
+    if (Auth.isAdmin()) {
+      menuItems.push({
+        icon: '🛡',
+        label: 'Droits de modération',
+        action: () => openModerationModal(ch),
+      });
+    }
+
+    // ── Supprimer (admin + mod) ──
+    menuItems.push({
+      icon: '🗑',
+      label: 'Supprimer le salon',
+      danger: true,
+      action: () => deleteChannel(ch.id),
+    });
+
+    menuItems.forEach(item => {
+      const btn = document.createElement('button');
+      btn.className = `w-full flex items-center gap-2.5 px-3 py-2 transition-colors text-left ${
+        item.danger
+          ? 'text-onkoz-danger hover:bg-onkoz-danger/15'
+          : 'text-onkoz-text-md hover:bg-onkoz-hover hover:text-onkoz-text'
+      }`;
+      btn.innerHTML = `<span class="text-base">${item.icon}</span><span>${item.label}</span>`;
+      btn.addEventListener('click', () => { menu.remove(); item.action(); });
+      menu.appendChild(btn);
+    });
+
+    document.body.appendChild(menu);
+
+    // Fermer au clic extérieur
+    setTimeout(() => {
+      document.addEventListener('click', function handler(ev) {
+        if (!menu.contains(ev.target)) { menu.remove(); document.removeEventListener('click', handler); }
+      });
+    }, 50);
+  }
+
+  // ── Modal droits de modération ────────────────────────────────────────────
+  async function openModerationModal(ch) {
+    // Récupérer les modérateurs
+    const mods = allUsers.filter(u => u.role === 'moderator');
+    if (!mods.length) {
+      AudioSettings.showToast('ℹ️ Aucun modérateur sur le serveur');
+      return;
+    }
+
+    // Créer modal
+    const overlay = document.createElement('div');
+    overlay.className = 'fixed inset-0 bg-black/70 flex items-center justify-center z-[300]';
+
+    const box = document.createElement('div');
+    box.className = 'bg-onkoz-surface border border-onkoz-border rounded-xl p-6 w-80 flex flex-col gap-4 shadow-dm';
+
+    box.innerHTML = `
+      <h3 class="font-bold text-lg text-onkoz-text">🛡 Droits de modération</h3>
+      <p class="text-sm text-onkoz-text-md">Salon : <strong class="text-onkoz-text">#${ch.name}</strong></p>
+      <p class="text-[0.75rem] text-onkoz-text-muted">Sélectionne les modérateurs qui peuvent gérer ce salon :</p>
+      <div id="mod-checklist" class="flex flex-col gap-2 max-h-48 overflow-y-auto"></div>
+      <div class="flex gap-2 justify-end pt-1">
+        <button id="mod-modal-cancel" class="px-4 py-2 rounded-md border border-onkoz-border text-onkoz-text-md hover:bg-onkoz-hover transition-colors text-sm font-medium">Annuler</button>
+        <button id="mod-modal-save" class="px-4 py-2 rounded-md bg-onkoz-accent hover:bg-onkoz-accent-dk text-white font-semibold text-sm transition-colors">Enregistrer</button>
+      </div>`;
+
+    // Charger les droits existants du salon
+    const channelMods = await loadChannelMods(ch.id);
+    const checklist = box.querySelector('#mod-checklist');
+
+    mods.forEach(mod => {
+      const label = document.createElement('label');
+      label.className = 'flex items-center gap-3 px-2 py-1.5 rounded-md hover:bg-onkoz-hover cursor-pointer transition-colors';
+      const checked = channelMods.includes(mod.id);
+      label.innerHTML = `
+        <input type="checkbox" value="${mod.id}" ${checked ? 'checked' : ''} class="accent-onkoz-accent w-4 h-4 cursor-pointer" />
+        <div class="${UI.avatarClass(mod.username)} w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white uppercase">${mod.username[0]}</div>
+        <span class="text-sm text-onkoz-text font-medium">${mod.username}</span>
+        <span class="role-badge moderator ml-auto">Mod</span>`;
+      checklist.appendChild(label);
+    });
+
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+
+    box.querySelector('#mod-modal-cancel').addEventListener('click', () => overlay.remove());
+    box.querySelector('#mod-modal-save').addEventListener('click', async () => {
+      const selected = [...box.querySelectorAll('input[type=checkbox]:checked')].map(cb => parseInt(cb.value));
+      await saveChannelMods(ch.id, selected);
+      overlay.remove();
+      AudioSettings.showToast(`✅ Droits de modération mis à jour pour #${ch.name}`);
+    });
+  }
+
+  // ── Stocker/charger les droits de modération par salon ───────────────────
+  // Stocké en localStorage (côté client) — peut être migré en DB plus tard
+  function getModPermsKey(channelId) { return `onkoz_modperms_${channelId}`; }
+
+  function loadChannelMods(channelId) {
+    try {
+      return JSON.parse(localStorage.getItem(getModPermsKey(channelId)) || '[]');
+    } catch { return []; }
+  }
+
+  function saveChannelMods(channelId, modIds) {
+    localStorage.setItem(getModPermsKey(channelId), JSON.stringify(modIds));
+    // Notifier via socket pour que les autres clients soient informés
+    socket?.emit('channel:mod-perms', { channelId, modIds });
+    return Promise.resolve();
+  }
+
+  // Vérifier si l'utilisateur courant a des droits sur un salon spécifique
+  function canModerateChannel(channelId) {
+    if (Auth.isAdmin()) return true;
+    if (!Auth.isMod()) return false;
+    const user = Auth.getUser();
+    const mods = loadChannelMods(channelId);
+    return mods.includes(user.id);
   }
 
   async function deleteChannel(id) {
