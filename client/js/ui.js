@@ -193,28 +193,16 @@ const UI = (() => {
 
     li.append(av, info);
 
-    // Actions admin
+    // Bouton options admin
     if (me && Auth.isAdmin() && u.id !== me.id) {
-      const actions = document.createElement('div');
-      actions.className = 'hidden gap-1 items-center';
-
-      const kickBtn = document.createElement('button');
-      kickBtn.className = 'text-[0.65rem] font-bold px-1.5 py-px rounded text-onkoz-danger bg-onkoz-danger/15 hover:bg-onkoz-danger/30 transition-colors';
-      kickBtn.textContent = 'Kick';
-      kickBtn.addEventListener('click', e => { e.stopPropagation(); App.kickUser(u.id); });
-
-      const modBtn = document.createElement('button');
-      modBtn.className = 'text-[0.65rem] font-bold px-1.5 py-px rounded text-onkoz-mod bg-onkoz-mod/15 hover:bg-onkoz-mod/30 transition-colors';
-      modBtn.textContent = u.role === 'moderator' ? '→User' : '→Mod';
-      modBtn.addEventListener('click', e => {
-        e.stopPropagation();
-        App.changeRole(u.id, u.role === 'moderator' ? 'user' : 'moderator');
-      });
-
-      actions.append(kickBtn, modBtn);
-      li.append(actions);
-      li.addEventListener('mouseenter', () => actions.classList.replace('hidden', 'flex'));
-      li.addEventListener('mouseleave', () => actions.classList.replace('flex', 'hidden'));
+      const optBtn = document.createElement('button');
+      optBtn.className = 'hidden w-6 h-6 items-center justify-center rounded text-onkoz-text-muted hover:bg-onkoz-hover hover:text-onkoz-text transition-colors font-bold text-base shrink-0';
+      optBtn.textContent = '⋮';
+      optBtn.title = 'Options';
+      optBtn.addEventListener('click', e => { e.stopPropagation(); openUserMenu(e, u); });
+      li.append(optBtn);
+      li.addEventListener('mouseenter', () => optBtn.classList.replace('hidden', 'flex'));
+      li.addEventListener('mouseleave', () => optBtn.classList.replace('flex', 'hidden'));
     }
 
     // Clic → popup profil (ou DM si autre utilisateur)
@@ -227,6 +215,72 @@ const UI = (() => {
     });
 
     document.getElementById(isOnline ? 'online-users' : 'offline-users').appendChild(li);
+  }
+
+  // ── Menu options utilisateur ───────────────────────────────────────────────
+  function openUserMenu(e, u) {
+    document.getElementById('user-ctx-menu')?.remove();
+
+    const menu = document.createElement('div');
+    menu.id = 'user-ctx-menu';
+    menu.className = 'fixed z-[300] bg-onkoz-surface border border-onkoz-border rounded-lg shadow-dm py-1 w-48 text-sm overflow-hidden';
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    let top  = rect.bottom + 4;
+    let left = rect.left - 160;
+    if (left < 8) left = rect.right + 4;
+    if (top + 200 > window.innerHeight) top = rect.top - 204;
+    menu.style.top  = `${top}px`;
+    menu.style.left = `${left}px`;
+
+    // Header utilisateur
+    const header = document.createElement('div');
+    header.className = 'flex items-center gap-2 px-3 py-2 border-b border-onkoz-border mb-1';
+    header.innerHTML = `
+      <div class="${avatarClass(u.username)} w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white uppercase">${u.username[0]}</div>
+      <span class="font-bold text-sm text-onkoz-text truncate">${u.username}</span>`;
+    menu.appendChild(header);
+
+    const items = [];
+
+    // Rôles
+    if (u.role !== 'admin') {
+      if (u.role !== 'moderator') {
+        items.push({ icon: '🛡', label: 'Passer Modérateur', action: () => App.changeRole(u.id, 'moderator') });
+      } else {
+        items.push({ icon: '👤', label: 'Passer Utilisateur', action: () => App.changeRole(u.id, 'user') });
+      }
+      items.push({ icon: '👑', label: 'Passer Admin', action: () => App.changeRole(u.id, 'admin') });
+    }
+
+    // Séparateur + kick
+    items.push({ separator: true });
+    items.push({ icon: '👢', label: 'Expulser (Kick)', danger: true, action: () => App.kickUser(u.id) });
+
+    items.forEach(item => {
+      if (item.separator) {
+        const sep = document.createElement('div');
+        sep.className = 'border-t border-onkoz-border my-1';
+        menu.appendChild(sep);
+        return;
+      }
+      const btn = document.createElement('button');
+      btn.className = `w-full flex items-center gap-2.5 px-3 py-2 transition-colors text-left text-sm ${
+        item.danger
+          ? 'text-onkoz-danger hover:bg-onkoz-danger/15'
+          : 'text-onkoz-text-md hover:bg-onkoz-hover hover:text-onkoz-text'
+      }`;
+      btn.innerHTML = `<span>${item.icon}</span><span>${item.label}</span>`;
+      btn.addEventListener('click', () => { menu.remove(); item.action(); });
+      menu.appendChild(btn);
+    });
+
+    document.body.appendChild(menu);
+    setTimeout(() => {
+      document.addEventListener('click', function handler(ev) {
+        if (!menu.contains(ev.target)) { menu.remove(); document.removeEventListener('click', handler); }
+      });
+    }, 50);
   }
 
   // ── Footer user ────────────────────────────────────────────────────────────
