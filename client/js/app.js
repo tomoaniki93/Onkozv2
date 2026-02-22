@@ -22,6 +22,7 @@ const App = (() => {
       API.getCategories(), API.getUsers(),
     ]);
     UI.setUsers(allUsers);
+    Profile.preloadProfiles(allUsers);
     renderSidebar();
     connectSocket(user);
   }
@@ -31,6 +32,7 @@ const App = (() => {
     socket = io({ auth: { token: API.getToken() } });
     Voice.init(socket);
     Chat.init(socket);
+    Profile.init(socket);
 
     socket.on('online:list',       ids  => UI.setOnline(ids));
     socket.on('user:online',       ({ userId }) => UI.setUserOnline(userId));
@@ -609,7 +611,8 @@ const App = (() => {
     document.getElementById('dm-send-btn').addEventListener('click', () => Chat.sendDM());
     document.getElementById('dm-input').addEventListener('keydown', e => { if (e.key === 'Enter') Chat.sendDM(); });
     document.getElementById('close-dm').addEventListener('click', () => Chat.closeDM());
-    document.getElementById('btn-audio-settings').addEventListener('click', () => AudioSettings.toggle());
+    document.getElementById('btn-audio-settings').addEventListener('click',   () => AudioSettings.toggle());
+    document.getElementById('btn-profile-settings').addEventListener('click', () => Profile.openEditPanel());
   }
 
   return { launch, kickUser, changeRole, showUnreadBadge, bindEvents };

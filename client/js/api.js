@@ -46,6 +46,8 @@ const API = (() => {
 
     // ── Users ─────────────────────────────────────────────────────────────
     getUsers:     ()       => request('GET',   '/users'),
+    getUserProfile: (id)   => request('GET',   `/users/${id}/profile`),
+    updateProfile:  (data) => request('PATCH', '/users/me/profile', data),
     changeRole:   (id, r)  => request('PATCH', `/users/${id}/role`, { role: r }),
     deleteUser:   (id)     => request('DELETE', `/users/${id}`),
 

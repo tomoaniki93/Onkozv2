@@ -12,7 +12,11 @@ CREATE TABLE IF NOT EXISTS users (
   password    TEXT    NOT NULL,
   role        TEXT    NOT NULL DEFAULT 'user' CHECK(role IN ('admin','moderator','user')),
   created_at  INTEGER NOT NULL DEFAULT (unixepoch()),
-  last_seen   INTEGER
+  last_seen   INTEGER,
+  bio         TEXT    DEFAULT NULL,
+  status      TEXT    DEFAULT NULL,
+  avatar_url  TEXT    DEFAULT NULL,
+  banner_url  TEXT    DEFAULT NULL
 );
 
 -- Catégories de salons

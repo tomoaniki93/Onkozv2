@@ -254,6 +254,23 @@ function setupSocketHandlers(io) {
       });
     });
 
+    // ── PROFIL ────────────────────────────────────────────────────────────────
+
+    socket.on('profile:update', ({ bio, status, avatar_url, banner_url }) => {
+      // Mettre à jour en DB
+      const isValidUrl = u => { try { new URL(u); return true; } catch { return false; } };
+      if (bio    !== undefined && bio    !== null && bio.length    > 200) return;
+      if (status !== undefined && status !== null && status.length >  50) return;
+      if (avatar_url && !isValidUrl(avatar_url)) return;
+      if (banner_url && !isValidUrl(banner_url)) return;
+
+      db.prepare('UPDATE users SET bio=?, status=?, avatar_url=?, banner_url=? WHERE id=?')
+        .run(bio ?? null, status ?? null, avatar_url ?? null, banner_url ?? null, userId);
+
+      // Diffuser à tous
+      io.emit('profile:updated', { userId, username, bio, status, avatar_url, banner_url });
+    });
+
     // ── MODÉRATION ────────────────────────────────────────────────────────────
 
     socket.on('mod:kick', ({ targetId }) => {

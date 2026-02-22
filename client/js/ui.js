@@ -8,10 +8,20 @@ const UI = (() => {
     return AV_COLORS[hash % AV_COLORS.length];
   }
 
-  function makeAvatar(username, extraClasses = '') {
+  function makeAvatar(username, extraClasses = '', userId = null, avatarUrl = null) {
     const div = document.createElement('div');
-    div.className = `${avatarClass(username)} w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm text-white shrink-0 uppercase ${extraClasses}`;
-    div.textContent = username[0];
+    div.className = `${avatarClass(username)} user-avatar w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm text-white shrink-0 uppercase overflow-hidden ${extraClasses}`;
+    if (avatarUrl) {
+      div.style.backgroundImage    = `url(${avatarUrl})`;
+      div.style.backgroundSize     = 'cover';
+      div.style.backgroundPosition = 'center';
+    } else {
+      div.textContent = username[0];
+    }
+    if (userId) {
+      div.style.cursor = 'pointer';
+      div.addEventListener('click', e => { e.stopPropagation(); Profile.openProfilePopup(userId, username, div); });
+    }
     return div;
   }
 
@@ -147,27 +157,46 @@ const UI = (() => {
   function appendUserItem(u, isOnline, me) {
     const li = document.createElement('li');
     li.dataset.userId = u.id;
-    li.className = `flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer transition-colors hover:bg-onkoz-hover ${isOnline ? '' : 'opacity-50'}`;
+    li.className = `flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer transition-colors hover:bg-onkoz-hover group ${isOnline ? '' : 'opacity-50'}`;
 
-    const av = makeAvatar(u.username, 'w-7 h-7 text-xs');
+    const av = makeAvatar(u.username, 'w-7 h-7 text-xs', u.id, u.avatar_url);
 
-    // Point online
+    const info = document.createElement('div');
+    info.className = 'flex-1 min-w-0';
+
+    const nameRow = document.createElement('div');
+    nameRow.className = 'flex items-center gap-1.5';
+
     if (isOnline) {
       const dot = document.createElement('span');
       dot.className = 'w-2 h-2 rounded-full bg-onkoz-success shrink-0';
-      li.append(dot);
+      nameRow.appendChild(dot);
     }
 
     const name = document.createElement('span');
-    name.className = 'flex-1 text-[0.88rem] font-medium truncate text-onkoz-text';
+    name.className = 'text-[0.88rem] font-medium truncate text-onkoz-text';
     name.textContent = u.username;
+    nameRow.append(name, roleBadge(u.role));
+    info.appendChild(nameRow);
 
-    li.append(av, name, roleBadge(u.role));
+    // Statut personnalisé
+    if (u.status) {
+      const st = document.createElement('p');
+      st.className = 'user-status text-[0.68rem] text-onkoz-text-muted truncate';
+      st.textContent = u.status;
+      info.appendChild(st);
+    } else {
+      const st = document.createElement('p');
+      st.className = 'user-status hidden text-[0.68rem] text-onkoz-text-muted truncate';
+      info.appendChild(st);
+    }
+
+    li.append(av, info);
 
     // Actions admin
     if (me && Auth.isAdmin() && u.id !== me.id) {
       const actions = document.createElement('div');
-      actions.className = 'hidden group-hover:flex gap-1 items-center';
+      actions.className = 'hidden gap-1 items-center';
 
       const kickBtn = document.createElement('button');
       kickBtn.className = 'text-[0.65rem] font-bold px-1.5 py-px rounded text-onkoz-danger bg-onkoz-danger/15 hover:bg-onkoz-danger/30 transition-colors';
@@ -183,17 +212,19 @@ const UI = (() => {
       });
 
       actions.append(kickBtn, modBtn);
-      li.classList.add('group');
       li.append(actions);
-
-      // Afficher au hover via JS (Tailwind group ne fonctionne pas ici car la div est créée dynamiquement)
-      li.addEventListener('mouseenter', () => actions.classList.remove('hidden'));
-      li.addEventListener('mouseleave', () => actions.classList.add('hidden'));
+      li.addEventListener('mouseenter', () => actions.classList.replace('hidden', 'flex'));
+      li.addEventListener('mouseleave', () => actions.classList.replace('flex', 'hidden'));
     }
 
-    if (me && u.id !== me.id) {
-      li.addEventListener('click', () => Chat.openDM(u.id, u.username));
-    }
+    // Clic → popup profil (ou DM si autre utilisateur)
+    li.addEventListener('click', () => {
+      if (u.id === me?.id) {
+        Profile.openEditPanel();
+      } else {
+        Profile.openProfilePopup(u.id, u.username, li);
+      }
+    });
 
     document.getElementById(isOnline ? 'online-users' : 'offline-users').appendChild(li);
   }
