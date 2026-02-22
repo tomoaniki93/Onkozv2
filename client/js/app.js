@@ -43,6 +43,9 @@ const App = (() => {
     socket.on('dm:message',        msg  => Chat.onDMMessage(msg));
     socket.on('voice:peer:joined', data => Voice.onPeerJoined(data));
     socket.on('voice:peer:left',   data => Voice.onPeerLeft(data));
+    socket.on('screen:stopped',    ({ peerId }) => {
+      document.getElementById(`screen-overlay-${peerId}`)?.remove();
+    });
     socket.on('voice:peers',       peers => Voice.onExistingPeers(peers));
     socket.on('kicked', () => { alert('Vous avez été expulsé.'); API.clearToken(); location.reload(); });
 
@@ -604,6 +607,7 @@ const App = (() => {
 
   // ── Bind events ───────────────────────────────────────────────────────────
   function bindEvents() {
+    document.getElementById('voice-bar-screenshare').addEventListener('click', () => Voice.toggleScreenShare());
     document.getElementById('voice-bar-mute').addEventListener('click',  () => Voice.toggleMute());
     document.getElementById('voice-bar-leave').addEventListener('click', () => { Voice.leaveRoom(); hideVoiceBar(); });
     document.getElementById('send-btn').addEventListener('click', () => Chat.sendMessage());

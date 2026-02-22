@@ -271,6 +271,13 @@ function setupSocketHandlers(io) {
       io.emit('profile:updated', { userId, username, bio, status, avatar_url, banner_url });
     });
 
+    // ── PARTAGE D'ÉCRAN ───────────────────────────────────────────────────────
+
+    socket.on('screen:stop', ({ roomId }) => {
+      // Informer les autres membres du salon que le partage s'est arrêté
+      socket.to(roomId).emit('screen:stopped', { peerId: socket.id, userId, username });
+    });
+
     // ── MODÉRATION ────────────────────────────────────────────────────────────
 
     socket.on('mod:kick', ({ targetId }) => {
