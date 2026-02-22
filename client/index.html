@@ -81,6 +81,50 @@
     <!-- Liste des canaux (catégories + salons + éphémères) -->
     <div id="channel-list" class="flex-1 overflow-y-auto py-2 flex flex-col gap-0"></div>
 
+    <!-- ── Panneau vocal (style Discord, caché par défaut) ─────────────────── -->
+    <div id="voice-panel" class="hidden flex-col shrink-0 mx-2 mb-1 rounded-lg overflow-hidden border border-onkoz-success/40 bg-onkoz-success/5">
+
+      <!-- Ligne statut -->
+      <div class="flex items-center gap-2 px-3 pt-2.5 pb-1">
+        <span class="w-2 h-2 rounded-full bg-onkoz-success animate-pulse shrink-0"></span>
+        <div class="flex-1 min-w-0">
+          <p class="text-[0.72rem] font-bold text-onkoz-success leading-none">Voix connectée</p>
+          <p id="voice-panel-channel" class="text-[0.7rem] text-onkoz-text-muted truncate mt-0.5"></p>
+        </div>
+        <!-- Bouton quitter discret -->
+        <button id="voice-panel-leave" title="Déconnecter"
+                class="w-6 h-6 flex items-center justify-center rounded text-onkoz-text-muted hover:text-onkoz-danger hover:bg-onkoz-danger/15 transition-colors shrink-0">
+          <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" fill="currentColor" viewBox="0 0 16 16">
+            <path d="M5.765 4.009A5 5 0 0 1 8 3.5c.28 0 .557.02.83.057L7.5 4.9A3.001 3.001 0 0 0 5 7.5v1.49l-1.947 1.84A6 6 0 0 1 2 7.5c0-1.46.524-2.796 1.389-3.831l-.812-.812a.5.5 0 0 1 .707-.707l.481.481zm2.171 5.683-.717.678A3 3 0 0 0 11 7.5v-.041a.5.5 0 0 1 .146-.354L12 6.251V7.5a5 5 0 0 1-4.064 4.192zM6.586 15H6a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h4a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-.586l1.5 1H6.586L8 15H6.586z"/>
+            <path d="M13.657 1.757a.5.5 0 0 1 0 .707L2.343 13.778a.5.5 0 1 1-.707-.707L12.95 1.757a.5.5 0 0 1 .707 0z"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Séparateur + boutons -->
+      <div class="flex items-center gap-1 px-2 pb-2.5 pt-1 border-t border-onkoz-success/20 mt-1">
+        <!-- Mute -->
+        <button id="voice-panel-mute" title="Couper le micro"
+                class="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md text-onkoz-text-muted hover:bg-onkoz-hover hover:text-onkoz-text transition-colors text-sm font-medium">
+          <span id="voice-panel-mute-icon">🎤</span>
+        </button>
+
+        <!-- Partage écran -->
+        <button id="voice-panel-screenshare" title="Partager l'écran"
+                class="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md text-onkoz-text-muted hover:bg-onkoz-hover hover:text-onkoz-text transition-colors text-sm">
+          <span id="voice-panel-screen-icon">🖥️</span>
+        </button>
+
+        <!-- Déconnexion (rouge) -->
+        <button id="voice-panel-leave2" title="Quitter le vocal"
+                class="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md text-onkoz-danger hover:bg-onkoz-danger/20 transition-colors text-sm font-medium">
+          <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" fill="currentColor" viewBox="0 0 16 16">
+            <path d="M3.112 5.112a3 3 0 0 0-.17.613C2.028 6.588 2 7.exclusive 2 8s.028 1.412.942 2.275l1.131-1.132A3.5 3.5 0 0 1 3.5 8c0-.484.099-.943.273-1.36L3.112 5.112zm3.776.72a3 3 0 1 0 2.224 0 3 3 0 0 0-2.224 0zm-1.16-4.047A6 6 0 0 1 8 1.5a6 6 0 0 1 4.27 10.237l-.764-.764A5 5 0 0 0 8 2.5a5 5 0 0 0-3.506 8.473l-.765.764A6 6 0 0 1 3.728 1.785zM8 9.5a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3z"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+
     <!-- Footer user -->
     <div class="border-t border-onkoz-border p-2 shrink-0">
       <div class="flex flex-col gap-1 px-2 py-1.5 rounded-md hover:bg-onkoz-hover transition-colors cursor-default">
@@ -129,23 +173,6 @@
         <div class="text-6xl">🎤</div>
         <h2 class="text-onkoz-text-md text-xl font-semibold">Bienvenue sur ONKOZ</h2>
         <p class="text-sm">Sélectionne un salon pour commencer</p>
-      </div>
-    </div>
-
-    <!-- Barre vocale persistante (comme Discord) -->
-    <div id="voice-bar" class="hidden items-center justify-between px-4 py-2 bg-onkoz-success/10 border-t border-onkoz-success/30 shrink-0">
-      <div class="flex items-center gap-2">
-        <span class="w-2 h-2 rounded-full bg-onkoz-success animate-pulse shrink-0"></span>
-        <span class="text-xs text-onkoz-success font-semibold">Connecté dans</span>
-        <span id="voice-bar-name" class="text-xs font-bold text-onkoz-text"></span>
-      </div>
-      <div class="flex items-center gap-1">
-        <button id="voice-bar-screenshare" title="Partager l'écran"
-                class="w-7 h-7 flex items-center justify-center rounded text-onkoz-text-muted hover:bg-onkoz-hover hover:text-onkoz-text transition-colors text-sm">🖥️</button>
-        <button id="voice-bar-mute" title="Muet"
-                class="w-7 h-7 flex items-center justify-center rounded text-onkoz-text-muted hover:bg-onkoz-hover hover:text-onkoz-text transition-colors text-sm">🎤</button>
-        <button id="voice-bar-leave" title="Quitter le vocal"
-                class="w-7 h-7 flex items-center justify-center rounded text-onkoz-danger hover:bg-onkoz-danger/20 transition-colors text-sm">📞</button>
       </div>
     </div>
 

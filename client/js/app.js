@@ -364,18 +364,18 @@ const App = (() => {
     return null;
   }
 
-  // ── Barre vocale persistante ───────────────────────────────────────────────
+  // ── Panneau vocal sidebar (style Discord) ────────────────────────────────
   function showVoiceBar(channelName) {
-    const bar = document.getElementById('voice-bar');
-    bar.classList.remove('hidden');
-    bar.classList.add('flex');
-    document.getElementById('voice-bar-name').textContent = channelName;
+    const panel = document.getElementById('voice-panel');
+    panel.classList.remove('hidden');
+    panel.classList.add('flex');
+    document.getElementById('voice-panel-channel').textContent = channelName;
   }
 
   function hideVoiceBar() {
-    const bar = document.getElementById('voice-bar');
-    bar.classList.add('hidden');
-    bar.classList.remove('flex');
+    const panel = document.getElementById('voice-panel');
+    panel.classList.add('hidden');
+    panel.classList.remove('flex');
   }
 
   // ── Créer catégorie ───────────────────────────────────────────────────────
@@ -607,9 +607,11 @@ const App = (() => {
 
   // ── Bind events ───────────────────────────────────────────────────────────
   function bindEvents() {
-    document.getElementById('voice-bar-screenshare').addEventListener('click', () => Voice.toggleScreenShare());
-    document.getElementById('voice-bar-mute').addEventListener('click',  () => Voice.toggleMute());
-    document.getElementById('voice-bar-leave').addEventListener('click', () => { Voice.leaveRoom(); hideVoiceBar(); });
+    // Panneau vocal sidebar
+    document.getElementById('voice-panel-screenshare').addEventListener('click', () => Voice.toggleScreenShare());
+    document.getElementById('voice-panel-mute').addEventListener('click',  () => Voice.toggleMute());
+    document.getElementById('voice-panel-leave').addEventListener('click',  () => { Voice.leaveRoom(); hideVoiceBar(); });
+    document.getElementById('voice-panel-leave2').addEventListener('click', () => { Voice.leaveRoom(); hideVoiceBar(); });
     document.getElementById('send-btn').addEventListener('click', () => Chat.sendMessage());
     document.getElementById('message-input').addEventListener('keydown', e => { if (e.key === 'Enter') Chat.sendMessage(); });
     document.getElementById('dm-send-btn').addEventListener('click', () => Chat.sendDM());

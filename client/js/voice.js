@@ -304,22 +304,6 @@ const Voice = (() => {
     screenConsumers.clear();
   }
 
-  function updateShareBtn(sharing) {
-    const btn = document.getElementById('voice-bar-screenshare');
-    if (!btn) return;
-    if (sharing) {
-      btn.textContent = '⏹';
-      btn.title = 'Arrêter le partage';
-      btn.classList.add('text-onkoz-danger');
-      btn.classList.remove('text-onkoz-text-muted');
-    } else {
-      btn.textContent = '🖥️';
-      btn.title = 'Partager l\'écran';
-      btn.classList.remove('text-onkoz-danger');
-      btn.classList.add('text-onkoz-text-muted');
-    }
-  }
-
   // ═══════════════════════════════════════════════════════════════════════════
   //  HELPERS
   // ═══════════════════════════════════════════════════════════════════════════
@@ -331,10 +315,37 @@ const Voice = (() => {
   }
 
   function updateMuteBtn() {
-    const btn = document.getElementById('voice-bar-mute');
-    if (!btn) return;
-    btn.textContent = isMuted ? '🔇' : '🎤';
-    btn.title = isMuted ? 'Activer le micro' : 'Couper le micro';
+    const icon = document.getElementById('voice-panel-mute-icon');
+    const btn  = document.getElementById('voice-panel-mute');
+    if (!icon || !btn) return;
+    if (isMuted) {
+      icon.textContent = '🔇';
+      btn.title = 'Activer le micro';
+      btn.classList.add('text-onkoz-danger', 'bg-onkoz-danger/15');
+      btn.classList.remove('text-onkoz-text-muted');
+    } else {
+      icon.textContent = '🎤';
+      btn.title = 'Couper le micro';
+      btn.classList.remove('text-onkoz-danger', 'bg-onkoz-danger/15');
+      btn.classList.add('text-onkoz-text-muted');
+    }
+  }
+
+  function updateShareBtn(sharing) {
+    const icon = document.getElementById('voice-panel-screen-icon');
+    const btn  = document.getElementById('voice-panel-screenshare');
+    if (!icon || !btn) return;
+    if (sharing) {
+      icon.textContent = '⏹';
+      btn.title = 'Arrêter le partage';
+      btn.classList.add('text-onkoz-danger');
+      btn.classList.remove('text-onkoz-text-muted');
+    } else {
+      icon.textContent = '🖥️';
+      btn.title = 'Partager l\'écran';
+      btn.classList.remove('text-onkoz-danger');
+      btn.classList.add('text-onkoz-text-muted');
+    }
   }
 
   function addPeerToUI(peerId, username) {
