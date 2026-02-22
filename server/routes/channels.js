@@ -72,7 +72,30 @@ router.get('/:id/messages', requireAuth, (req, res) => {
     ? db.prepare(`SELECT m.*, u.username, u.role FROM messages m JOIN users u ON m.user_id = u.id WHERE m.channel_id = ? AND m.id < ? ORDER BY m.id DESC LIMIT ?`).all(req.params.id, before, limit)
     : db.prepare(`SELECT m.*, u.username, u.role FROM messages m JOIN users u ON m.user_id = u.id WHERE m.channel_id = ? ORDER BY m.id DESC LIMIT ?`).all(req.params.id, limit);
 
-  res.json(messages.reverse());
+  // Charger les réactions pour ces messages
+  const msgIds = messages.map(m => m.id);
+  let reactionsMap = {};
+  if (msgIds.length > 0) {
+    const rows = db.prepare(`
+      SELECT r.message_id, r.emoji, r.user_id, u.username
+      FROM reactions r JOIN users u ON r.user_id = u.id
+      WHERE r.message_id IN (${msgIds.map(() => '?').join(',')})
+      ORDER BY r.created_at
+    `).all(...msgIds);
+    rows.forEach(({ message_id, emoji, user_id, username }) => {
+      if (!reactionsMap[message_id]) reactionsMap[message_id] = {};
+      if (!reactionsMap[message_id][emoji]) reactionsMap[message_id][emoji] = { emoji, count: 0, users: [] };
+      reactionsMap[message_id][emoji].count++;
+      reactionsMap[message_id][emoji].users.push({ userId: user_id, username });
+    });
+  }
+
+  const result = messages.reverse().map(m => ({
+    ...m,
+    reactions: Object.values(reactionsMap[m.id] || {}),
+  }));
+
+  res.json(result);
 });
 
 module.exports = router;

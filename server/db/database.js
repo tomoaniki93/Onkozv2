@@ -35,13 +35,17 @@ function ensureAdmin(db) {
   }
 }
 
-// Nettoyer les messages privés > 7 jours (appelé au démarrage et toutes les heures)
+// Nettoyer les messages > 7 jours (DMs + salons texte, appelé au démarrage et toutes les heures)
 function cleanOldDMs(db) {
   const cutoff = Math.floor(Date.now() / 1000) - 7 * 24 * 3600;
-  const result = db.prepare('DELETE FROM direct_messages WHERE created_at < ?').run(cutoff);
-  if (result.changes > 0) {
-    console.log(`[DB] Nettoyage DM : ${result.changes} messages supprimés (> 7 jours)`);
-  }
+
+  const dmResult = db.prepare('DELETE FROM direct_messages WHERE created_at < ?').run(cutoff);
+  if (dmResult.changes > 0)
+    console.log(`[DB] Nettoyage DM : ${dmResult.changes} messages supprimés (> 7 jours)`);
+
+  const msgResult = db.prepare('DELETE FROM messages WHERE created_at < ?').run(cutoff);
+  if (msgResult.changes > 0)
+    console.log(`[DB] Nettoyage salons : ${msgResult.changes} messages supprimés (> 7 jours)`);
 }
 
 module.exports = { getDb, cleanOldDMs };

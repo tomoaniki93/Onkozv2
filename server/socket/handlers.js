@@ -216,6 +216,44 @@ function setupSocketHandlers(io) {
       catch (err) { cb?.({ error: err.message }); }
     });
 
+    // ── RÉACTIONS ────────────────────────────────────────────────────────────
+
+    socket.on('reaction:toggle', ({ messageId, emoji, channelId }) => {
+      if (!messageId || !emoji) return;
+      const existing = db.prepare(
+        'SELECT id FROM reactions WHERE message_id = ? AND user_id = ? AND emoji = ?'
+      ).get(messageId, userId, emoji);
+
+      if (existing) {
+        db.prepare('DELETE FROM reactions WHERE id = ?').run(existing.id);
+      } else {
+        db.prepare(
+          'INSERT OR IGNORE INTO reactions (message_id, user_id, emoji) VALUES (?, ?, ?)'
+        ).run(messageId, userId, emoji);
+      }
+
+      // Recalculer toutes les réactions du message
+      const rows = db.prepare(`
+        SELECT r.emoji, r.user_id, u.username
+        FROM reactions r JOIN users u ON r.user_id = u.id
+        WHERE r.message_id = ?
+        ORDER BY r.created_at
+      `).all(messageId);
+
+      // Grouper par emoji
+      const grouped = {};
+      rows.forEach(({ emoji, user_id, username }) => {
+        if (!grouped[emoji]) grouped[emoji] = { emoji, count: 0, users: [] };
+        grouped[emoji].count++;
+        grouped[emoji].users.push({ userId: user_id, username });
+      });
+
+      io.to(`ch:${channelId}`).emit('reaction:update', {
+        messageId,
+        reactions: Object.values(grouped),
+      });
+    });
+
     // ── MODÉRATION ────────────────────────────────────────────────────────────
 
     socket.on('mod:kick', ({ targetId }) => {

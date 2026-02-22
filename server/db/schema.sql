@@ -54,6 +54,19 @@ CREATE TABLE IF NOT EXISTS direct_messages (
   created_at  INTEGER NOT NULL DEFAULT (unixepoch())
 );
 
+-- Réactions aux messages
+CREATE TABLE IF NOT EXISTS reactions (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  message_id  INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+  user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  emoji       TEXT    NOT NULL,
+  created_at  INTEGER NOT NULL DEFAULT (unixepoch()),
+  UNIQUE(message_id, user_id, emoji)
+);
+
+-- Index
+CREATE INDEX IF NOT EXISTS idx_reactions_message ON reactions(message_id);
+
 -- Index
 CREATE INDEX IF NOT EXISTS idx_messages_channel ON messages(channel_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_dm_users ON direct_messages(from_id, to_id, created_at);

@@ -26,16 +26,15 @@ const Chat = (() => {
   }
 
   function appendMessage(msg, area, scroll = true) {
-    const isMod = Auth.isMod();
+    const isMod = Auth.isMod() || Auth.isAdmin();
+    const me    = Auth.getUser();
 
     const div = document.createElement('div');
     div.dataset.msgId = msg.id;
-    div.className = 'group flex gap-3 px-2 py-1 rounded-md hover:bg-onkoz-hover transition-colors';
+    div.className = 'group flex gap-3 px-2 py-1 rounded-md hover:bg-onkoz-hover/50 transition-colors relative';
 
-    // Avatar
     const av = UI.makeAvatar(msg.username);
 
-    // Body
     const body = document.createElement('div');
     body.className = 'flex-1 min-w-0';
 
@@ -56,21 +55,66 @@ const Chat = (() => {
     content.className = 'text-[0.9rem] text-onkoz-text leading-relaxed break-words';
     content.textContent = msg.content;
 
-    body.append(header, content);
+    // Zone réactions
+    const reactionsEl = document.createElement('div');
+    reactionsEl.id = `reactions-${msg.id}`;
+    reactionsEl.className = 'flex flex-wrap gap-1 mt-1';
+    renderReactions(reactionsEl, msg.reactions || [], msg.id, me);
+
+    body.append(header, content, reactionsEl);
     div.append(av, body);
 
-    // Supprimer (mod/admin)
+    // Barre d'actions au survol
+    const actions = document.createElement('div');
+    actions.className = 'absolute right-2 top-1 hidden group-hover:flex items-center gap-1 bg-onkoz-surface border border-onkoz-border rounded-md shadow-sm px-1 py-0.5';
+
+    const emojiBtn = document.createElement('button');
+    emojiBtn.className = 'w-7 h-7 flex items-center justify-center rounded hover:bg-onkoz-hover transition-colors text-onkoz-text-muted hover:text-onkoz-text text-base';
+    emojiBtn.textContent = '😊';
+    emojiBtn.title = 'Ajouter une réaction';
+    emojiBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      EmojiPicker.open(emojiBtn, emoji => {
+        socket.emit('reaction:toggle', { messageId: msg.id, emoji, channelId: currentTextChannel });
+      });
+    });
+    actions.appendChild(emojiBtn);
+
     if (isMod) {
       const delBtn = document.createElement('button');
-      delBtn.className = 'hidden group-hover:block text-[0.7rem] text-onkoz-danger bg-onkoz-danger/15 hover:bg-onkoz-danger/30 px-1.5 py-px rounded transition-colors shrink-0 self-start mt-1';
+      delBtn.className = 'w-7 h-7 flex items-center justify-center rounded hover:bg-onkoz-danger/20 transition-colors text-onkoz-text-muted hover:text-onkoz-danger text-sm';
       delBtn.textContent = '🗑';
       delBtn.title = 'Supprimer';
       delBtn.addEventListener('click', () => socket.emit('chat:delete', { messageId: msg.id, channelId: currentTextChannel }));
-      div.append(delBtn);
+      actions.appendChild(delBtn);
     }
 
+    div.appendChild(actions);
     area.appendChild(div);
     if (scroll) area.scrollTop = area.scrollHeight;
+  }
+
+  function renderReactions(container, reactions, msgId, me) {
+    container.innerHTML = '';
+    reactions.forEach(({ emoji, count, users }) => {
+      const iReacted = users.some(u => u.userId === me?.id);
+      const btn = document.createElement('button');
+      btn.className = `inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-sm transition-colors ${
+        iReacted ? 'bg-onkoz-accent/20 border-onkoz-accent text-onkoz-accent-lt' : 'bg-onkoz-hover border-onkoz-border text-onkoz-text hover:border-onkoz-accent'
+      }`;
+      btn.innerHTML = `<span>${emoji}</span><span class="text-[0.72rem] font-bold">${count}</span>`;
+      btn.title = users.map(u => u.username).join(', ');
+      btn.addEventListener('click', () => {
+        socket.emit('reaction:toggle', { messageId: msgId, emoji, channelId: currentTextChannel });
+      });
+      container.appendChild(btn);
+    });
+  }
+
+  function onReactionUpdate({ messageId, reactions }) {
+    const container = document.getElementById(`reactions-${messageId}`);
+    if (!container) return;
+    renderReactions(container, reactions, messageId, Auth.getUser());
   }
 
   function onMessage(msg) {
@@ -188,5 +232,5 @@ const Chat = (() => {
     });
   }
 
-  return { init, joinTextChannel, onMessage, onDeleted, sendMessage, openDM, onDMMessage, sendDM, closeDM, setupEphemeralText };
+  return { init, joinTextChannel, onMessage, onDeleted, onReactionUpdate, sendMessage, openDM, onDMMessage, sendDM, closeDM, setupEphemeralText };
 })();
