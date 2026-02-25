@@ -112,6 +112,49 @@ const AudioSettings = (() => {
 
         <div class="border-t border-onkoz-border"></div>
 
+        <!-- ── RÉDUCTION DE BRUIT ── -->
+        <div class="flex flex-col gap-3">
+          <p class="text-[0.72rem] font-bold uppercase tracking-wider text-onkoz-text-muted">🔇 Réduction de bruit</p>
+
+          <!-- Toggle activé/désactivé -->
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-sm text-onkoz-text font-medium">Filtrage actif</p>
+              <p class="text-[0.68rem] text-onkoz-text-muted">Atténue bruits ambiants, clavier, télé</p>
+            </div>
+            <button id="nr-toggle"
+                    class="relative w-11 h-6 rounded-full transition-colors duration-200 focus:outline-none shrink-0">
+              <span id="nr-toggle-knob" class="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200"></span>
+            </button>
+          </div>
+
+          <!-- Slider intensité -->
+          <div id="nr-intensity-section" class="flex flex-col gap-2">
+            <div class="flex justify-between items-center">
+              <span class="text-[0.7rem] text-onkoz-text-muted">Intensité</span>
+              <span id="nr-intensity-label" class="text-[0.7rem] font-semibold text-onkoz-accent-lt"></span>
+            </div>
+            <input id="nr-intensity" type="range" min="1" max="3" step="1"
+                   class="w-full accent-onkoz-accent cursor-pointer" />
+            <!-- Étiquettes -->
+            <div class="flex justify-between text-[0.65rem] text-onkoz-text-muted px-0.5">
+              <span>Léger</span>
+              <span>Modéré</span>
+              <span>Agressif</span>
+            </div>
+          </div>
+
+          <!-- Info -->
+          <div class="bg-onkoz-deep border border-onkoz-border rounded-md px-3 py-2">
+            <p class="text-[0.68rem] text-onkoz-text-muted leading-relaxed">
+              ⓘ Les changements s'appliquent à la <strong>prochaine connexion</strong> vocale.
+              Rejoins à nouveau un salon après modification.
+            </p>
+          </div>
+        </div>
+
+        <div class="border-t border-onkoz-border"></div>
+
         <!-- ── BOUTON SAUVEGARDER ── -->
         <button id="btn-save-audio"
                 class="bg-onkoz-accent hover:bg-onkoz-accent-dk text-white font-semibold text-sm py-2 rounded-md transition-colors">
@@ -141,6 +184,9 @@ const AudioSettings = (() => {
 
     // Charger les périphériques
     await loadDevices();
+
+    // ── Réduction de bruit ──
+    initNoiseReducerControls();
 
     // Fermer si clic extérieur
     setTimeout(() => {
@@ -339,6 +385,58 @@ const AudioSettings = (() => {
       btn.classList.remove('bg-onkoz-danger/20', 'border-onkoz-danger', 'text-onkoz-danger');
     }
     document.getElementById('speaker-status')?.classList.add('hidden');
+  }
+
+  // ── Contrôles réduction de bruit ─────────────────────────────────────────
+  function initNoiseReducerControls() {
+    const toggle    = document.getElementById('nr-toggle');
+    const knob      = document.getElementById('nr-toggle-knob');
+    const slider    = document.getElementById('nr-intensity');
+    const label     = document.getElementById('nr-intensity-label');
+    const section   = document.getElementById('nr-intensity-section');
+    if (!toggle) return;
+
+    const LABELS = { 1: 'Léger', 2: 'Modéré', 3: 'Agressif' };
+
+    let enabled   = NoiseReducer.isEnabled();
+    let intensity = NoiseReducer.getIntensity();
+
+    function updateToggleUI() {
+      if (enabled) {
+        toggle.classList.add('bg-onkoz-accent');
+        toggle.classList.remove('bg-onkoz-border');
+        knob.style.transform = 'translateX(20px)';
+        section.classList.remove('opacity-40', 'pointer-events-none');
+      } else {
+        toggle.classList.remove('bg-onkoz-accent');
+        toggle.classList.add('bg-onkoz-border');
+        knob.style.transform = 'translateX(0)';
+        section.classList.add('opacity-40', 'pointer-events-none');
+      }
+    }
+
+    function updateSliderUI() {
+      slider.value     = intensity;
+      label.textContent = LABELS[intensity] || '';
+    }
+
+    // Init
+    updateToggleUI();
+    updateSliderUI();
+
+    // Toggle clic
+    toggle.addEventListener('click', () => {
+      enabled = !enabled;
+      localStorage.setItem('onkoz_nr_enabled', enabled ? 'true' : 'false');
+      updateToggleUI();
+    });
+
+    // Slider change
+    slider.addEventListener('input', () => {
+      intensity = parseInt(slider.value);
+      localStorage.setItem('onkoz_nr_intensity', intensity);
+      updateSliderUI();
+    });
   }
 
   // ── Sauvegarder & Fermer ──────────────────────────────────────────────────

@@ -23,10 +23,15 @@ const Voice = (() => {
 
     try {
       const micId = AudioSettings.getMicId();
-      localStream = await navigator.mediaDevices.getUserMedia({
-        audio: micId && micId !== 'default' ? { deviceId: { ideal: micId } } : true,
+      const rawStream = await navigator.mediaDevices.getUserMedia({
+        audio: micId && micId !== 'default'
+          ? { deviceId: { ideal: micId }, echoCancellation: true, noiseSuppression: true }
+          : { echoCancellation: true, noiseSuppression: true },
         video: false,
       });
+
+      // Appliquer la chaîne de réduction de bruit
+      localStream = await NoiseReducer.process(rawStream);
       device = new mediasoupClient.Device();
 
       const { caps } = await socketEmit('ms:getRouterCapabilities', { roomId });
@@ -105,6 +110,7 @@ const Voice = (() => {
   async function leaveRoom() {
     if (!currentRoomId) return;
     if (isSharing) await stopScreenShare(false);
+    NoiseReducer.dispose();
 
     currentType === 'permanent'
       ? socket.emit('voice:leave',    { channelId: currentChannelId })
