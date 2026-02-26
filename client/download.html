@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ONKOZ — Télécharger l'application</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
+<style>
+/* ── Reset & Variables ─────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:        #09090f;
+  --surface:   #0f0f1a;
+  --card:      #13131e;
+  --border:    #1e1e2e;
+  --border-lt: #2a2a40;
+  --text:      #e8e8f0;
+  --muted:     #5a5a7a;
+  --subtle:    #8080a0;
+  --accent:    #7c5cbf;
+  --accent-lt: #a688e8;
+  --accent-dk: #5a3d9e;
+  --glow:      rgba(124, 92, 191, 0.35);
+  --success:   #3ba55c;
+  --win-blue:  #0078d4;
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 15px;
+  line-height: 1.6;
+  overflow-x: hidden;
+  min-height: 100vh;
+}
+
+/* ── Fond animé ────────────────────────────────────────────────────────────── */
+.bg-canvas {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(120px);
+  opacity: 0.18;
+  animation: drift 20s ease-in-out infinite;
+}
+.orb-1 {
+  width: 700px; height: 700px;
+  background: radial-gradient(circle, #7c5cbf, transparent 70%);
+  top: -200px; left: -200px;
+  animation-delay: 0s;
+}
+.orb-2 {
+  width: 500px; height: 500px;
+  background: radial-gradient(circle, #5865f2, transparent 70%);
+  bottom: -100px; right: -100px;
+  animation-delay: -8s;
+}
+.orb-3 {
+  width: 400px; height: 400px;
+  background: radial-gradient(circle, #eb459e, transparent 70%);
+  top: 50%; left: 60%;
+  animation-delay: -14s;
+  opacity: 0.09;
+}
+
+@keyframes drift {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33%       { transform: translate(40px, -30px) scale(1.05); }
+  66%       { transform: translate(-20px, 40px) scale(0.96); }
+}
+
+/* Grille de points subtile */
+.bg-grid {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  background-image:
+    radial-gradient(circle, rgba(255,255,255,0.04) 1px, transparent 1px);
+  background-size: 32px 32px;
+  pointer-events: none;
+}
+
+/* ── Layout ────────────────────────────────────────────────────────────────── */
+.wrapper {
+  position: relative;
+  z-index: 1;
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 0 24px 80px;
+}
+
+/* ── Nav ───────────────────────────────────────────────────────────────────── */
+nav {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 22px 40px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+
+.nav-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+}
+.nav-logo img {
+  width: 32px; height: 32px;
+  object-fit: contain;
+  border-radius: 8px;
+}
+.nav-logo span {
+  font-family: 'Syne', sans-serif;
+  font-weight: 800;
+  font-size: 18px;
+  letter-spacing: 0.12em;
+  color: var(--accent-lt);
+}
+
+.nav-version {
+  font-size: 12px;
+  color: var(--muted);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 4px 12px;
+  font-family: 'DM Sans', sans-serif;
+}
+
+/* ── Hero ──────────────────────────────────────────────────────────────────── */
+.hero {
+  text-align: center;
+  padding: 72px 0 56px;
+}
+
+.hero-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: rgba(124,92,191,0.12);
+  border: 1px solid rgba(124,92,191,0.3);
+  border-radius: 30px;
+  padding: 5px 16px 5px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--accent-lt);
+  margin-bottom: 28px;
+  animation: fadeUp 0.6s ease both;
+}
+.hero-badge::before {
+  content: '';
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--success);
+  box-shadow: 0 0 8px var(--success);
+  animation: blink 1.8s ease-in-out infinite;
+}
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+.hero h1 {
+  font-family: 'Syne', sans-serif;
+  font-weight: 800;
+  font-size: clamp(38px, 6vw, 62px);
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  color: #fff;
+  animation: fadeUp 0.6s 0.1s ease both;
+}
+
+.hero h1 span {
+  background: linear-gradient(135deg, var(--accent-lt) 0%, #c084f5 50%, #a88de8 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.hero-sub {
+  margin: 20px auto 0;
+  max-width: 480px;
+  color: var(--subtle);
+  font-size: 16px;
+  font-weight: 300;
+  animation: fadeUp 0.6s 0.2s ease both;
+}
+
+/* ── Carte téléchargement principale ───────────────────────────────────────── */
+.download-card {
+  position: relative;
+  margin: 44px 0;
+  background: var(--card);
+  border: 1px solid var(--border-lt);
+  border-radius: 20px;
+  padding: 40px;
+  overflow: hidden;
+  animation: fadeUp 0.6s 0.3s ease both;
+  transition: border-color 0.3s;
+}
+.download-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at top left, rgba(124,92,191,0.08), transparent 60%);
+  pointer-events: none;
+}
+.download-card:hover {
+  border-color: rgba(124,92,191,0.4);
+}
+
+/* Accent line top */
+.download-card::after {
+  content: '';
+  position: absolute;
+  top: 0; left: 40px; right: 40px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  opacity: 0.6;
+}
+
+.card-inner {
+  display: flex;
+  align-items: center;
+  gap: 32px;
+}
+
+/* Icône Windows */
+.win-icon {
+  flex-shrink: 0;
+  width: 72px; height: 72px;
+  background: linear-gradient(135deg, #0a84ff22, #0078d420);
+  border: 1px solid rgba(0,120,212,0.25);
+  border-radius: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.win-icon svg { width: 36px; height: 36px; }
+
+.card-info { flex: 1; min-width: 0; }
+
+.card-title {
+  font-family: 'Syne', sans-serif;
+  font-size: 22px;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 6px;
+}
+
+.card-meta {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.meta-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.meta-tag svg { width: 13px; height: 13px; opacity: 0.7; }
+
+/* Bouton téléchargement */
+.btn-download {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--accent);
+  color: #fff;
+  font-family: 'Syne', sans-serif;
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: 0.03em;
+  padding: 14px 28px;
+  border-radius: 12px;
+  text-decoration: none;
+  border: none;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.2s, box-shadow 0.2s;
+  box-shadow: 0 0 0 rgba(124,92,191,0);
+}
+.btn-download::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255,255,255,0.15), transparent);
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.btn-download:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 32px var(--glow);
+}
+.btn-download:hover::before { opacity: 1; }
+.btn-download:active { transform: translateY(0); }
+
+.btn-download svg { width: 18px; height: 18px; }
+
+/* ── Barre de progression (état téléchargement) ────────────────────────────── */
+.progress-wrap {
+  display: none;
+  margin-top: 28px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border);
+}
+.progress-wrap.active { display: block; }
+.progress-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+.progress-track {
+  height: 4px;
+  background: var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.progress-bar {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, var(--accent), var(--accent-lt));
+  border-radius: 4px;
+  transition: width 0.4s ease;
+}
+
+/* ── Features grid ─────────────────────────────────────────────────────────── */
+.features {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin: 16px 0 44px;
+  animation: fadeUp 0.6s 0.4s ease both;
+}
+
+@media (max-width: 640px) {
+  .features { grid-template-columns: 1fr 1fr; }
+  .card-inner { flex-direction: column; text-align: center; }
+  .btn-download { width: 100%; justify-content: center; }
+}
+
+.feature {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 20px;
+  transition: border-color 0.25s, transform 0.25s;
+}
+.feature:hover {
+  border-color: var(--border-lt);
+  transform: translateY(-2px);
+}
+.feature-icon {
+  font-size: 22px;
+  margin-bottom: 10px;
+  display: block;
+}
+.feature-title {
+  font-family: 'Syne', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+.feature-desc {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+/* ── Instructions ──────────────────────────────────────────────────────────── */
+.steps {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 36px 40px;
+  margin-bottom: 44px;
+  animation: fadeUp 0.6s 0.5s ease both;
+}
+
+.steps-title {
+  font-family: 'Syne', sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 28px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.steps-title::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.step-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.step {
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--border);
+  position: relative;
+}
+.step:last-child { border-bottom: none; padding-bottom: 0; }
+.step:first-child { padding-top: 0; }
+
+.step-num {
+  flex-shrink: 0;
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  background: rgba(124,92,191,0.12);
+  border: 1px solid rgba(124,92,191,0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Syne', sans-serif;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--accent-lt);
+  margin-top: 2px;
+}
+
+.step-content strong {
+  display: block;
+  font-weight: 500;
+  color: var(--text);
+  margin-bottom: 3px;
+  font-size: 14px;
+}
+.step-content p {
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+/* ── Footer ────────────────────────────────────────────────────────────────── */
+footer {
+  position: relative;
+  z-index: 1;
+  text-align: center;
+  padding: 28px;
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+  color: var(--muted);
+}
+footer a { color: var(--subtle); text-decoration: none; }
+footer a:hover { color: var(--accent-lt); }
+
+/* ── Animations globales ───────────────────────────────────────────────────── */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(24px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Toast */
+.toast {
+  position: fixed;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%) translateY(10px);
+  background: var(--card);
+  border: 1px solid var(--border-lt);
+  border-radius: 12px;
+  padding: 12px 20px;
+  font-size: 13px;
+  color: var(--text);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  opacity: 0;
+  transition: opacity 0.3s, transform 0.3s;
+  pointer-events: none;
+  z-index: 100;
+  white-space: nowrap;
+}
+.toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+</style>
+</head>
+<body>
+
+<!-- Fond -->
+<div class="bg-canvas">
+  <div class="orb orb-1"></div>
+  <div class="orb orb-2"></div>
+  <div class="orb orb-3"></div>
+</div>
+<div class="bg-grid"></div>
+
+<!-- Nav -->
+<nav>
+  <a href="https://onkoz.fr" class="nav-logo">
+    <img src="/assets/icon.png" alt="ONKOZ" />
+    <span>ONKOZ</span>
+  </a>
+  <span class="nav-version" id="versionTag">v1.0.0</span>
+</nav>
+
+<!-- Contenu -->
+<div class="wrapper">
+
+  <!-- Hero -->
+  <section class="hero">
+    <div class="hero-badge">Disponible maintenant</div>
+    <h1>L'application<br><span>ONKOZ</span> pour Windows</h1>
+    <p class="hero-sub">
+      Accédez à votre plateforme vocale et chat directement depuis votre bureau,
+      sans navigateur.
+    </p>
+  </section>
+
+  <!-- Carte téléchargement -->
+  <div class="download-card">
+    <div class="card-inner">
+
+      <!-- Icône Windows -->
+      <div class="win-icon">
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M3 5.557L10.357 4.5V11.5H3V5.557Z" fill="#0078d4"/>
+          <path d="M11.357 4.357L21 3V11.5H11.357V4.357Z" fill="#0078d4"/>
+          <path d="M3 12.5H10.357V19.5L3 18.443V12.5Z" fill="#0078d4"/>
+          <path d="M11.357 12.5H21V21L11.357 19.643V12.5Z" fill="#0078d4"/>
+        </svg>
+      </div>
+
+      <!-- Infos -->
+      <div class="card-info">
+        <div class="card-title">ONKOZ pour Windows</div>
+        <div class="card-meta">
+          <span class="meta-tag">
+            <svg viewBox="0 0 16 16" fill="currentColor">
+              <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/>
+              <path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/>
+            </svg>
+            Windows 10 / 11
+          </span>
+          <span class="meta-tag">
+            <svg viewBox="0 0 16 16" fill="currentColor">
+              <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/>
+              <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/>
+            </svg>
+            x64
+          </span>
+          <span class="meta-tag" id="sizeTag">
+            <svg viewBox="0 0 16 16" fill="currentColor">
+              <path d="M9.293 0H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V4.707A1 1 0 0 0 13.707 4L10 .293A1 1 0 0 0 9.293 0zM9.5 3.5v-2l3 3h-2a1 1 0 0 1-1-1z"/>
+            </svg>
+            ~170 Mo
+          </span>
+          <span class="meta-tag" style="color: #3ba55c;">
+            <svg viewBox="0 0 16 16" fill="currentColor">
+              <path d="M10.97 4.97a.75.75 0 0 1 1.07 1.05l-3.99 4.99a.75.75 0 0 1-1.08.02L4.324 8.384a.75.75 0 1 1 1.06-1.06l2.094 2.093 3.473-4.425a.267.267 0 0 1 .02-.022z"/>
+            </svg>
+            Mise à jour automatique
+          </span>
+        </div>
+      </div>
+
+      <!-- Bouton -->
+      <a class="btn-download" href="/updates/ONKOZ-1.0.0.exe" id="dlBtn" download>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="7,10 12,15 17,10"/>
+          <line x1="12" y1="15" x2="12" y2="3"/>
+        </svg>
+        Télécharger
+      </a>
+    </div>
+
+    <!-- Barre de progression -->
+    <div class="progress-wrap" id="progressWrap">
+      <div class="progress-label">
+        <span id="progressLabel">Téléchargement en cours…</span>
+        <span id="progressPct">0%</span>
+      </div>
+      <div class="progress-track">
+        <div class="progress-bar" id="progressBar"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Features -->
+  <div class="features">
+    <div class="feature">
+      <span class="feature-icon">🖥️</span>
+      <div class="feature-title">Application native</div>
+      <div class="feature-desc">Fenêtre dédiée sans navigateur, toujours accessible</div>
+    </div>
+    <div class="feature">
+      <span class="feature-icon">🔔</span>
+      <div class="feature-title">Notifications système</div>
+      <div class="feature-desc">Alertes Windows pour les messages et appels entrants</div>
+    </div>
+    <div class="feature">
+      <span class="feature-icon">📌</span>
+      <div class="feature-title">Barre des tâches</div>
+      <div class="feature-desc">Réduit dans le systray, toujours en arrière-plan</div>
+    </div>
+    <div class="feature">
+      <span class="feature-icon">🎤</span>
+      <div class="feature-title">Réduction de bruit</div>
+      <div class="feature-desc">Filtrage audio avancé pour les salons vocaux</div>
+    </div>
+    <div class="feature">
+      <span class="feature-icon">🖥️</span>
+      <div class="feature-title">Partage d'écran</div>
+      <div class="feature-desc">Partagez votre écran directement depuis l'app</div>
+    </div>
+    <div class="feature">
+      <span class="feature-icon">⚡</span>
+      <div class="feature-title">Mises à jour auto</div>
+      <div class="feature-desc">Toujours à jour, silencieusement en arrière-plan</div>
+    </div>
+  </div>
+
+  <!-- Étapes -->
+  <div class="steps">
+    <div class="steps-title">Installation</div>
+    <div class="step-list">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-content">
+          <strong>Télécharger le fichier</strong>
+          <p>Cliquez sur le bouton "Télécharger" ci-dessus pour obtenir le fichier <code style="color:var(--accent-lt);font-size:12px">ONKOZ.exe</code></p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-content">
+          <strong>Lancer l'installateur</strong>
+          <p>Double-cliquez sur le fichier téléchargé. Si Windows SmartScreen apparaît, cliquez sur "Informations complémentaires" puis "Exécuter quand même".</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-content">
+          <strong>Connexion à votre compte</strong>
+          <p>L'application s'ouvre directement sur ONKOZ. Connectez-vous avec vos identifiants habituels.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">4</div>
+        <div class="step-content">
+          <strong>Mises à jour automatiques</strong>
+          <p>L'application se met à jour automatiquement en arrière-plan. Un badge dans la barre de titre vous prévient quand une nouvelle version est prête.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Footer -->
+<footer>
+  <p>© 2025 ONKOZ — <a href="https://onkoz.fr">onkoz.fr</a></p>
+</footer>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+  // ── Récupérer la version depuis latest.yml ──────────────────────────────
+  fetch('/updates/latest.yml')
+    .then(r => r.text())
+    .then(txt => {
+      const match = txt.match(/version:\s*(.+)/);
+      if (match) {
+        const v = match[1].trim();
+        document.getElementById('versionTag').textContent = `v${v}`;
+
+        // Mettre à jour le lien de téléchargement avec le bon nom de fichier
+        const dlBtn = document.getElementById('dlBtn');
+        // Chercher le nom du fichier dans le yml
+        const fileMatch = txt.match(/url:\s*(.+\.exe)/);
+        if (fileMatch) {
+          dlBtn.href = `/updates/${fileMatch[1].trim()}`;
+        }
+      }
+    })
+    .catch(() => {});
+
+  // ── Animation de téléchargement ─────────────────────────────────────────
+  document.getElementById('dlBtn').addEventListener('click', function(e) {
+    // Simuler une barre de progression visuelle
+    const wrap  = document.getElementById('progressWrap');
+    const bar   = document.getElementById('progressBar');
+    const label = document.getElementById('progressLabel');
+    const pct   = document.getElementById('progressPct');
+
+    wrap.classList.add('active');
+
+    let p = 0;
+    const interval = setInterval(() => {
+      // Progression rapide au début, ralentit vers la fin
+      p += p < 60 ? Math.random() * 12 : p < 85 ? Math.random() * 5 : Math.random() * 1.5;
+      if (p >= 100) {
+        p = 100;
+        clearInterval(interval);
+        label.textContent = '✅ Téléchargement terminé !';
+        bar.style.background = 'linear-gradient(90deg, #3ba55c, #57f287)';
+        showToast('✅ Téléchargement démarré');
+        setTimeout(() => wrap.classList.remove('active'), 4000);
+      }
+      bar.style.width = `${p}%`;
+      pct.textContent = `${Math.round(p)}%`;
+    }, 180);
+  });
+
+  // ── Toast ────────────────────────────────────────────────────────────────
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 3000);
+  }
+</script>
+</body>
+</html>
