@@ -9,7 +9,7 @@ const multer  = require('multer');
 const path    = require('path');
 const fs      = require('fs');
 const crypto  = require('crypto');
-const auth    = require('../middleware/auth');
+const { requireAuth } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -40,7 +40,7 @@ const upload = multer({
 });
 
 // POST /api/upload
-router.post('/', auth, upload.single('image'), (req, res) => {
+router.post('/', requireAuth, upload.single('image'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'Aucun fichier reçu.' });
   const url = `/uploads/${req.file.filename}`;
   res.json({ url, filename: req.file.filename });

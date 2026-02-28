@@ -99,7 +99,7 @@ router.get('/:id/messages', requireAuth, (req, res) => {
 });
 
 // GET /api/channels/:id/pinned — messages épinglés du canal
-router.get('/:id/pinned', auth, (req, res) => {
+router.get('/:id/pinned', requireAuth, (req, res) => {
   const db = getDb();
   const channel = db.prepare('SELECT * FROM channels WHERE id = ? AND type = ?').get(req.params.id, 'text');
   if (!channel) return res.status(404).json({ error: 'Salon introuvable' });

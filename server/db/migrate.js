@@ -43,18 +43,3 @@ if (!msgCols.includes('pinned')) {
 console.log('[migrate] Migration terminée ✓');
 db.close();
 
-// Migration: table reactions
-try {
-  getDb().exec(`
-    CREATE TABLE IF NOT EXISTS reactions (
-      id         INTEGER PRIMARY KEY AUTOINCREMENT,
-      message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
-      user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      emoji      TEXT    NOT NULL,
-      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
-      UNIQUE(message_id, user_id, emoji)
-    );
-    CREATE INDEX IF NOT EXISTS idx_reactions_message ON reactions(message_id);
-  `);
-  console.log('[migrate] Table reactions OK');
-} catch(e) { console.log('[migrate] reactions:', e.message); }
