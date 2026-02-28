@@ -6,6 +6,26 @@ const Chat = (() => {
   let dmPartnerName = null;
   let pendingImageFile = null;
 
+  // Toast local (indépendant d'AudioSettings)
+  function showToast(msg) {
+    if (typeof AudioSettings !== 'undefined' && AudioSettings.showToast) {
+      AudioSettings.showToast(msg);
+      return;
+    }
+    // Fallback minimal
+    let t = document.getElementById('_chat-toast');
+    if (!t) {
+      t = document.createElement('div');
+      t.id = '_chat-toast';
+      t.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1e1e2e;border:1px solid #2a2a40;color:#e8e8f0;padding:10px 18px;border-radius:10px;font-size:13px;z-index:999;opacity:0;transition:opacity .3s;pointer-events:none';
+      document.body.appendChild(t);
+    }
+    t.textContent = msg;
+    t.style.opacity = '1';
+    clearTimeout(t._timer);
+    t._timer = setTimeout(() => { t.style.opacity = '0'; }, 3000);
+  }
+
   // ── Salon texte ────────────────────────────────────────────────────────────
   async function joinTextChannel(channelId, channelName) {
     if (currentTextChannel) socket.emit('chat:leave', currentTextChannel);
@@ -251,12 +271,12 @@ const Chat = (() => {
       // Validation type
       const ALLOWED = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
       if (!ALLOWED.includes(file.type)) {
-        AudioSettings.showToast('❌ Format non supporté. JPG, PNG, GIF, WEBP uniquement.');
+        showToast('❌ Format non supporté. JPG, PNG, GIF, WEBP uniquement.');
         return;
       }
       // Validation taille
       if (file.size > 10 * 1024 * 1024) {
-        AudioSettings.showToast('❌ Image trop lourde (max 10 Mo).');
+        showToast('❌ Image trop lourde (max 10 Mo).');
         return;
       }
 
@@ -338,7 +358,7 @@ const Chat = (() => {
       socket.emit('chat:message', { channelId: currentTextChannel, content });
 
     } catch (err) {
-      AudioSettings.showToast(`❌ ${err.message}`);
+      showToast(`❌ ${err.message}`);
     } finally {
       sendBtn.textContent = '↑';
       sendBtn.disabled = false;
@@ -619,7 +639,7 @@ const Chat = (() => {
       pinnedMessages.push(message);
     }
     updatePinButton();
-    AudioSettings.showToast('📌 Message épinglé');
+    showToast('📌 Message épinglé');
   }
 
   function onUnpinned({ messageId, channelId }) {
@@ -642,7 +662,7 @@ const Chat = (() => {
     // Mettre à jour le panneau si ouvert
     const panel = document.getElementById('pinned-panel');
     if (panel && !panel.classList.contains('hidden')) openPinnedPanel();
-    AudioSettings.showToast('📌 Message désépinglé');
+    showToast('📌 Message désépinglé');
   }
 
   return { init, joinTextChannel, onMessage, onDeleted, onReactionUpdate, sendMessage, openDM, onDMMessage, sendDM, closeDM, setupEphemeralText, onPinned, onUnpinned };
