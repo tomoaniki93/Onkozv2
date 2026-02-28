@@ -203,8 +203,6 @@ const Chat = (() => {
   //  PARTAGE D'IMAGES
   // ═══════════════════════════════════════════════════════════════════════════
 
-  let pendingImageFile = null;  // fichier en attente d'envoi
-
   function initImageUpload() {
     const fileInput    = document.getElementById('file-input');
     const previewBar   = document.getElementById('img-preview-bar');
