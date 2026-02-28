@@ -165,6 +165,27 @@
       <span id="channel-icon" class="text-onkoz-text-muted text-lg">#</span>
       <span id="channel-name" class="font-bold text-[1rem]">Sélectionne un salon</span>
       <span id="channel-category" class="text-[0.72rem] text-onkoz-text-muted ml-1"></span>
+      <div class="ml-auto flex items-center gap-1">
+        <button id="btn-pinned" title="Messages épinglés"
+                class="hidden items-center gap-1.5 px-2.5 h-7 rounded text-onkoz-text-muted hover:bg-onkoz-hover hover:text-onkoz-text transition-colors text-sm">
+          <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" fill="currentColor" viewBox="0 0 16 16">
+            <path d="M4.146.146A.5.5 0 0 1 4.5 0h7a.5.5 0 0 1 .5.5c0 .68-.342 1.174-.646 1.479-.126.125-.25.224-.354.298v4.431l.078.048c.203.127.476.314.751.555C12.36 7.775 13 8.527 13 9.5a.5.5 0 0 1-.5.5h-4v4.5c0 .276-.224 1.5-.5 1.5s-.5-1.224-.5-1.5V10h-4a.5.5 0 0 1-.5-.5c0-.973.64-1.725 1.17-2.189A5.921 5.921 0 0 1 5 6.708V2.277a2.77 2.77 0 0 1-.354-.298C4.342 1.674 4 1.179 4 .5a.5.5 0 0 1 .146-.354z"/>
+          </svg>
+          <span id="pin-count" class="text-[0.72rem] font-bold"></span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Panneau messages épinglés (slide-in) -->
+    <div id="pinned-panel" class="hidden flex-col w-full border-b border-onkoz-border bg-onkoz-surface shrink-0 max-h-64 overflow-y-auto">
+      <div class="flex items-center justify-between px-4 py-2 border-b border-onkoz-border shrink-0">
+        <span class="text-xs font-bold text-onkoz-text flex items-center gap-1.5">
+          📌 Messages épinglés
+          <span id="pinned-panel-count" class="text-onkoz-text-muted font-normal"></span>
+        </span>
+        <button id="pinned-panel-close" class="text-onkoz-text-muted hover:text-onkoz-text transition-colors text-sm">✕</button>
+      </div>
+      <div id="pinned-list" class="flex flex-col divide-y divide-onkoz-border"></div>
     </div>
 
     <!-- Contenu messages -->
@@ -178,7 +199,32 @@
 
     <!-- Input message -->
     <div id="message-input-area" class="px-4 py-3 border-t border-onkoz-border shrink-0" style="display:none">
-      <div class="flex items-center gap-2 bg-onkoz-surface border border-onkoz-border rounded-md px-3 py-1.5">
+
+      <!-- Prévisualisation image avant envoi -->
+      <div id="img-preview-bar" class="hidden items-center gap-3 mb-2 p-2 bg-onkoz-surface border border-onkoz-border rounded-lg">
+        <div class="relative shrink-0">
+          <img id="img-preview-thumb" src="" alt="" class="h-16 w-16 object-cover rounded-md border border-onkoz-border" />
+          <button id="img-preview-remove"
+                  class="absolute -top-1.5 -right-1.5 w-5 h-5 bg-onkoz-danger text-white rounded-full flex items-center justify-center text-xs font-bold hover:bg-red-600 transition-colors leading-none">✕</button>
+        </div>
+        <div class="flex flex-col gap-0.5 min-w-0">
+          <span id="img-preview-name" class="text-xs font-medium text-onkoz-text truncate max-w-[180px]"></span>
+          <span id="img-preview-size" class="text-[0.68rem] text-onkoz-text-muted"></span>
+        </div>
+      </div>
+
+      <!-- Zone drag & drop -->
+      <div id="msg-input-wrap" class="flex items-center gap-2 bg-onkoz-surface border border-onkoz-border rounded-md px-3 py-1.5 transition-colors">
+        <!-- Bouton attacher image -->
+        <label id="attach-btn" title="Partager une image (JPG, PNG, GIF, WEBP — max 10 Mo)"
+               class="w-7 h-7 flex items-center justify-center rounded text-onkoz-text-muted hover:bg-onkoz-hover hover:text-onkoz-text transition-colors cursor-pointer shrink-0">
+          <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" fill="currentColor" viewBox="0 0 16 16">
+            <path d="M4.502 9a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z"/>
+            <path d="M14.002 13a2 2 0 0 1-2 2h-10a2 2 0 0 1-2-2V5A2 2 0 0 1 2 3a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v8a2 2 0 0 1-1.998 2zM14 2H4a1 1 0 0 0-1 1h9.002a2 2 0 0 1 2 2v7A1 1 0 0 0 15 11V3a1 1 0 0 0-1-1zM2.002 4a1 1 0 0 0-1 1v8l2.646-2.354a.5.5 0 0 1 .63-.062l2.66 1.773 3.71-3.71a.5.5 0 0 1 .577-.094l1.777 1.947V5a1 1 0 0 0-1-1h-10z"/>
+          </svg>
+          <input id="file-input" type="file" accept="image/jpeg,image/png,image/gif,image/webp" class="hidden" />
+        </label>
+
         <input id="message-input" type="text" maxlength="2000" placeholder="Message..."
                class="flex-1 bg-transparent border-none outline-none text-onkoz-text placeholder:text-onkoz-text-muted text-sm" />
         <button id="send-btn" class="w-8 h-8 flex items-center justify-center bg-onkoz-accent hover:bg-onkoz-accent-dk text-white rounded-full transition-colors text-base shrink-0">↑</button>
@@ -198,6 +244,16 @@
       <ul id="offline-users" class="px-2"></ul>
     </div>
   </aside>
+</div>
+
+<!-- ── LIGHTBOX IMAGE ────────────────────────────────────────────────────── -->
+<div id="lightbox" class="hidden fixed inset-0 z-[300] bg-black/90 flex items-center justify-center p-4 cursor-zoom-out">
+  <button id="lightbox-close" class="absolute top-4 right-4 w-9 h-9 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors text-lg">✕</button>
+  <img id="lightbox-img" src="" alt="" class="max-w-full max-h-[92vh] rounded-lg shadow-2xl object-contain select-none" />
+  <a id="lightbox-dl" href="" download class="absolute bottom-4 right-4 flex items-center gap-2 px-4 py-2 bg-onkoz-accent hover:bg-onkoz-accent-dk text-white text-sm font-semibold rounded-lg transition-colors">
+    <svg width="14" height="14" fill="currentColor" viewBox="0 0 16 16"><path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/><path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/></svg>
+    Télécharger
+  </a>
 </div>
 
 <!-- ── DM PANEL ──────────────────────────────────────────────────────────── -->

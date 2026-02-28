@@ -45,6 +45,7 @@ CREATE TABLE IF NOT EXISTS messages (
   channel_id  INTEGER NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
   user_id     INTEGER NOT NULL REFERENCES users(id),
   content     TEXT    NOT NULL,
+  pinned      INTEGER NOT NULL DEFAULT 0,
   created_at  INTEGER NOT NULL DEFAULT (unixepoch())
 );
 

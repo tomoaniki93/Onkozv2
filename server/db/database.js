@@ -43,7 +43,7 @@ function cleanOldDMs(db) {
   if (dmResult.changes > 0)
     console.log(`[DB] Nettoyage DM : ${dmResult.changes} messages supprimés (> 7 jours)`);
 
-  const msgResult = db.prepare('DELETE FROM messages WHERE created_at < ?').run(cutoff);
+  const msgResult = db.prepare('DELETE FROM messages WHERE created_at < ? AND pinned = 0').run(cutoff);
   if (msgResult.changes > 0)
     console.log(`[DB] Nettoyage salons : ${msgResult.changes} messages supprimés (> 7 jours)`);
 }

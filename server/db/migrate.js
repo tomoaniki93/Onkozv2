@@ -33,6 +33,13 @@ if (!cols.includes('category_id')) {
   console.log('[migrate] category_id ajouté à channels');
 }
 
+// Ajouter pinned si absent sur messages
+const msgCols = db.pragma('table_info(messages)').map(c => c.name);
+if (!msgCols.includes('pinned')) {
+  db.exec(`ALTER TABLE messages ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0`);
+  console.log('[migrate] pinned ajouté à messages');
+}
+
 console.log('[migrate] Migration terminée ✓');
 db.close();
 

@@ -112,6 +112,34 @@ const AudioSettings = (() => {
 
         <div class="border-t border-onkoz-border"></div>
 
+        <!-- ── ANNONCES VOCALES ── -->
+        <div class="flex flex-col gap-3">
+          <p class="text-[0.72rem] font-bold uppercase tracking-wider text-onkoz-text-muted">🔔 Annonces vocales</p>
+
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-sm text-onkoz-text font-medium">Annoncer les connexions</p>
+              <p class="text-[0.68rem] text-onkoz-text-muted">« TomoAniki a rejoint le canal »</p>
+            </div>
+            <button id="announce-toggle"
+                    class="relative w-11 h-6 rounded-full transition-colors duration-200 focus:outline-none shrink-0">
+              <span id="announce-toggle-knob" class="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200"></span>
+            </button>
+          </div>
+
+          <!-- Volume annonces -->
+          <div id="announce-volume-section" class="flex flex-col gap-1">
+            <div class="flex justify-between items-center">
+              <span class="text-[0.7rem] text-onkoz-text-muted">Volume des annonces</span>
+              <span id="announce-volume-label" class="text-[0.7rem] font-mono text-onkoz-text-muted">80%</span>
+            </div>
+            <input id="announce-volume" type="range" min="0" max="100" value="80"
+                   class="w-full accent-onkoz-accent cursor-pointer" />
+          </div>
+        </div>
+
+        <div class="border-t border-onkoz-border"></div>
+
         <!-- ── RÉDUCTION DE BRUIT ── -->
         <div class="flex flex-col gap-3">
           <p class="text-[0.72rem] font-bold uppercase tracking-wider text-onkoz-text-muted">🔇 Réduction de bruit</p>
@@ -184,6 +212,9 @@ const AudioSettings = (() => {
 
     // Charger les périphériques
     await loadDevices();
+
+    // ── Annonces vocales ──
+    initAnnounceControls();
 
     // ── Réduction de bruit ──
     initNoiseReducerControls();
@@ -385,6 +416,48 @@ const AudioSettings = (() => {
       btn.classList.remove('bg-onkoz-danger/20', 'border-onkoz-danger', 'text-onkoz-danger');
     }
     document.getElementById('speaker-status')?.classList.add('hidden');
+  }
+
+  // ── Contrôles annonces vocales ────────────────────────────────────────────
+  function initAnnounceControls() {
+    const toggle  = document.getElementById('announce-toggle');
+    const knob    = document.getElementById('announce-toggle-knob');
+    const volSldr = document.getElementById('announce-volume');
+    const volLbl  = document.getElementById('announce-volume-label');
+    const section = document.getElementById('announce-volume-section');
+    if (!toggle) return;
+
+    let enabled = localStorage.getItem('onkoz_voice_announce') !== 'false';
+    const savedVol = Math.round(parseFloat(localStorage.getItem('onkoz_announce_volume') || '0.8') * 100);
+    volSldr.value    = savedVol;
+    volLbl.textContent = `${savedVol}%`;
+
+    function updateToggleUI() {
+      if (enabled) {
+        toggle.classList.add('bg-onkoz-accent');
+        toggle.classList.remove('bg-onkoz-border');
+        knob.style.transform = 'translateX(20px)';
+        section.classList.remove('opacity-40', 'pointer-events-none');
+      } else {
+        toggle.classList.remove('bg-onkoz-accent');
+        toggle.classList.add('bg-onkoz-border');
+        knob.style.transform = 'translateX(0)';
+        section.classList.add('opacity-40', 'pointer-events-none');
+      }
+    }
+    updateToggleUI();
+
+    toggle.addEventListener('click', () => {
+      enabled = !enabled;
+      localStorage.setItem('onkoz_voice_announce', enabled ? 'true' : 'false');
+      updateToggleUI();
+    });
+
+    volSldr.addEventListener('input', () => {
+      const v = parseInt(volSldr.value);
+      volLbl.textContent = `${v}%`;
+      localStorage.setItem('onkoz_announce_volume', (v / 100).toFixed(2));
+    });
   }
 
   // ── Contrôles réduction de bruit ─────────────────────────────────────────

@@ -354,6 +354,112 @@ const Voice = (() => {
     }
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  ANNONCES VOCALES (style TeamSpeak)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  const KEY_ANNOUNCE = 'onkoz_voice_announce'; // 'true' | 'false'
+
+  function isAnnounceEnabled() {
+    return localStorage.getItem(KEY_ANNOUNCE) !== 'false';
+  }
+
+  // File d'attente pour éviter les chevauchements
+  const announceQueue = [];
+  let   isAnnouncing  = false;
+
+  function announce(username, action) {
+    if (!isAnnounceEnabled()) return;
+    announceQueue.push({ username, action });
+    if (!isAnnouncing) processAnnounceQueue();
+  }
+
+  function processAnnounceQueue() {
+    if (announceQueue.length === 0) { isAnnouncing = false; return; }
+    isAnnouncing = true;
+    const { username, action } = announceQueue.shift();
+
+    // 1. Son d'entrée/sortie via Web Audio API
+    playJoinSound(action === 'join');
+
+    // 2. Synthèse vocale après le son (délai 350ms)
+    setTimeout(() => {
+      const msg  = action === 'join'
+        ? `${username} a rejoint le canal`
+        : `${username} a quitté le canal`;
+
+      if (!window.speechSynthesis) { processAnnounceQueue(); return; }
+
+      // Annuler toute synthèse en cours
+      window.speechSynthesis.cancel();
+
+      const utt  = new SpeechSynthesisUtterance(msg);
+      utt.lang   = 'fr-FR';
+      utt.volume = parseFloat(localStorage.getItem('onkoz_announce_volume') || '0.8');
+      utt.rate   = 1.05;
+      utt.pitch  = 1.0;
+
+      // Choisir une voix française si disponible
+      const voices = window.speechSynthesis.getVoices();
+      const frVoice = voices.find(v => v.lang.startsWith('fr')) || null;
+      if (frVoice) utt.voice = frVoice;
+
+      utt.onend   = () => setTimeout(processAnnounceQueue, 200);
+      utt.onerror = () => setTimeout(processAnnounceQueue, 200);
+
+      window.speechSynthesis.speak(utt);
+    }, 350);
+  }
+
+  // Son court généré via Web Audio (pas de fichier externe nécessaire)
+  function playJoinSound(isJoin) {
+    try {
+      const ctx  = new (window.AudioContext || window.webkitAudioContext)();
+      const vol  = parseFloat(localStorage.getItem('onkoz_announce_volume') || '0.8') * 0.4;
+      const gain = ctx.createGain();
+      gain.gain.value = vol;
+      gain.connect(ctx.destination);
+
+      if (isJoin) {
+        // Deux notes montantes (do → mi)
+        playNote(ctx, gain, 523.25, 0,    0.12); // Do5
+        playNote(ctx, gain, 659.25, 0.13, 0.12); // Mi5
+      } else {
+        // Deux notes descendantes (mi → do)
+        playNote(ctx, gain, 659.25, 0,    0.12); // Mi5
+        playNote(ctx, gain, 523.25, 0.13, 0.12); // Do5
+      }
+
+      // Fermer le contexte après la lecture
+      setTimeout(() => ctx.close(), 800);
+    } catch (e) { /* silencieux si AudioContext indisponible */ }
+  }
+
+  function playNote(ctx, dest, freq, startOffset, duration) {
+    const osc  = ctx.createOscillator();
+    const env  = ctx.createGain();
+    const now  = ctx.currentTime + startOffset;
+
+    osc.type            = 'sine';
+    osc.frequency.value = freq;
+
+    // Enveloppe ADSR douce
+    env.gain.setValueAtTime(0,   now);
+    env.gain.linearRampToValueAtTime(1, now + 0.01);
+    env.gain.linearRampToValueAtTime(0, now + duration);
+
+    osc.connect(env);
+    env.connect(dest);
+    osc.start(now);
+    osc.stop(now + duration + 0.05);
+  }
+
+  // ── Gestion des voix (chargement asynchrone) ───────────────────────────────
+  if (window.speechSynthesis) {
+    window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
+    window.speechSynthesis.getVoices(); // déclencher le chargement
+  }
+
   function addPeerToUI(peerId, username) {
     if (document.getElementById(`vp-${peerId}`)) return;
     const container = document.getElementById('voice-peers-container');
@@ -406,8 +512,17 @@ const Voice = (() => {
     });
   }
 
-  function onPeerJoined({ peerId, username }) { addPeerToUI(peerId, username); }
-  function onPeerLeft({ peerId })             { removePeerFromUI(peerId); }
+  function onPeerJoined({ peerId, username }) {
+    addPeerToUI(peerId, username);
+    announce(username, 'join');
+  }
+  function onPeerLeft({ peerId, username }) {
+    // Récupérer le username depuis le DOM si pas fourni
+    const el   = document.getElementById(`vp-${peerId}`);
+    const name = username || el?.querySelector('span')?.textContent?.trim() || 'Utilisateur';
+    removePeerFromUI(peerId);
+    announce(name, 'leave');
+  }
   function onExistingPeers(peers) {
     if (!recvTransport) { pendingPeers = peers; return; }
     peers.forEach(p => { addPeerToUI(p.peerId, p.username); handleNewProducer(p); });

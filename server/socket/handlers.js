@@ -71,6 +71,23 @@ function setupSocketHandlers(io) {
       io.to(`ch:${channelId}`).emit('chat:deleted', { messageId, channelId });
     });
 
+    // ── ÉPINGLAGE ────────────────────────────────────────────────────────────
+    socket.on('chat:pin', ({ messageId, channelId }) => {
+      if (!['admin', 'moderator'].includes(role)) return;
+      db.prepare('UPDATE messages SET pinned = 1 WHERE id = ?').run(messageId);
+      const msg = db.prepare(`
+        SELECT m.*, u.username, u.role FROM messages m
+        JOIN users u ON m.user_id = u.id WHERE m.id = ?
+      `).get(messageId);
+      if (msg) io.to(`ch:${channelId}`).emit('chat:pinned', { message: msg, channelId });
+    });
+
+    socket.on('chat:unpin', ({ messageId, channelId }) => {
+      if (!['admin', 'moderator'].includes(role)) return;
+      db.prepare('UPDATE messages SET pinned = 0 WHERE id = ?').run(messageId);
+      io.to(`ch:${channelId}`).emit('chat:unpinned', { messageId, channelId });
+    });
+
     // ── MESSAGES PRIVÉS ───────────────────────────────────────────────────────
 
     socket.on('dm:send', ({ toId, content }) => {
@@ -359,7 +376,7 @@ function leaveEphemeral(socket, eid, io) {
   ms.peerLeft(`ephemeral:${eid}`, socket.id);
   eph.members.delete(userId);
   socket.leave(`ephemeral:${eid}`);
-  socket.to(`ephemeral:${eid}`).emit('voice:peer:left', { peerId: socket.id, userId });
+  socket.to(`ephemeral:${eid}`).emit('voice:peer:left', { peerId: socket.id, userId, username });
 
   if (eph.members.size === 0) {
     ms.deleteRoom(`ephemeral:${eid}`);

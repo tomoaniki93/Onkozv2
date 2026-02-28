@@ -4,8 +4,7 @@ const Chat = (() => {
   let currentTextChannel = null;
   let dmPartnerId   = null;
   let dmPartnerName = null;
-
-  function init(s) { socket = s; }
+  let pendingImageFile = null;
 
   // ── Salon texte ────────────────────────────────────────────────────────────
   async function joinTextChannel(channelId, channelName) {
@@ -23,6 +22,8 @@ const Chat = (() => {
 
     document.getElementById('message-input-area').style.display = 'block';
     document.getElementById('message-input').focus();
+    closePinnedPanel();
+    loadPinned(channelId);
   }
 
   function appendMessage(msg, area, scroll = true) {
@@ -31,7 +32,8 @@ const Chat = (() => {
 
     const div = document.createElement('div');
     div.dataset.msgId = msg.id;
-    div.className = 'group flex gap-3 px-2 py-1 rounded-md hover:bg-onkoz-hover/50 transition-colors relative';
+    div.className = `group flex gap-3 px-2 py-1 rounded-md hover:bg-onkoz-hover/50 transition-colors relative${msg.pinned ? ' border-l-2 border-onkoz-accent bg-onkoz-accent/5' : ''}`;
+    if (msg.pinned) div.dataset.pinned = '1';
 
     const av = UI.makeAvatar(msg.username);
 
@@ -51,9 +53,46 @@ const Chat = (() => {
 
     header.append(author, time);
 
+    // Badge épinglé
+    if (msg.pinned) {
+      const pinBadge = document.createElement('span');
+      pinBadge.className = 'text-[0.68rem] text-onkoz-accent font-semibold flex items-center gap-0.5';
+      pinBadge.innerHTML = '📌 épinglé';
+      header.appendChild(pinBadge);
+    }
+
     const content = document.createElement('div');
     content.className = 'text-[0.9rem] text-onkoz-text leading-relaxed break-words';
-    content.textContent = msg.content;
+
+    // Parser le contenu : texte normal + image inline
+    const IMG_RE = /\[image:(\/uploads\/[^\]]+)\]/g;
+    const rawContent = msg.content || '';
+    const textPart   = rawContent.replace(IMG_RE, '').trim();
+    const imgMatches = [...rawContent.matchAll(IMG_RE)];
+
+    if (textPart) {
+      const t = document.createElement('p');
+      t.textContent = textPart;
+      content.appendChild(t);
+    }
+
+    imgMatches.forEach(([, url]) => {
+      const imgWrap = document.createElement('div');
+      imgWrap.className = 'mt-1.5';
+
+      const img = document.createElement('img');
+      img.src    = url;
+      img.alt    = 'Image partagée';
+      img.className = 'max-w-xs max-h-64 rounded-lg border border-onkoz-border object-cover cursor-zoom-in hover:opacity-90 transition-opacity';
+      img.loading   = 'lazy';
+      img.addEventListener('click', () => openLightbox(url));
+      img.addEventListener('error', () => {
+        imgWrap.innerHTML = `<span class="text-xs text-onkoz-text-muted italic">⚠ Image indisponible</span>`;
+      });
+
+      imgWrap.appendChild(img);
+      content.appendChild(imgWrap);
+    });
 
     // Zone réactions
     const reactionsEl = document.createElement('div');
@@ -81,6 +120,20 @@ const Chat = (() => {
     actions.appendChild(emojiBtn);
 
     if (isMod) {
+      // Bouton épingler / désépingler
+      const pinBtn = document.createElement('button');
+      pinBtn.className = `w-7 h-7 flex items-center justify-center rounded transition-colors text-sm ${msg.pinned ? 'text-onkoz-accent hover:bg-onkoz-danger/20 hover:text-onkoz-danger' : 'text-onkoz-text-muted hover:bg-onkoz-accent/20 hover:text-onkoz-accent'}`;
+      pinBtn.textContent = '📌';
+      pinBtn.title = msg.pinned ? 'Désépingler' : 'Épingler';
+      pinBtn.addEventListener('click', () => {
+        if (msg.pinned) {
+          socket.emit('chat:unpin', { messageId: msg.id, channelId: currentTextChannel });
+        } else {
+          socket.emit('chat:pin', { messageId: msg.id, channelId: currentTextChannel });
+        }
+      });
+      actions.appendChild(pinBtn);
+
       const delBtn = document.createElement('button');
       delBtn.className = 'w-7 h-7 flex items-center justify-center rounded hover:bg-onkoz-danger/20 transition-colors text-onkoz-text-muted hover:text-onkoz-danger text-sm';
       delBtn.textContent = '🗑';
@@ -126,12 +179,204 @@ const Chat = (() => {
     document.querySelector(`[data-msg-id="${messageId}"]`)?.remove();
   }
 
-  function sendMessage() {
-    const input = document.getElementById('message-input');
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  PARTAGE D'IMAGES
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  let pendingImageFile = null;  // fichier en attente d'envoi
+
+  function initImageUpload() {
+    const fileInput    = document.getElementById('file-input');
+    const previewBar   = document.getElementById('img-preview-bar');
+    const previewThumb = document.getElementById('img-preview-thumb');
+    const previewName  = document.getElementById('img-preview-name');
+    const previewSize  = document.getElementById('img-preview-size');
+    const removeBtn    = document.getElementById('img-preview-remove');
+    const inputWrap    = document.getElementById('msg-input-wrap');
+    const msgInput     = document.getElementById('message-input');
+
+    if (!fileInput) return;
+
+    // ── Sélection via bouton 📎 ──
+    fileInput.addEventListener('change', () => {
+      if (fileInput.files[0]) setImagePreview(fileInput.files[0]);
+      fileInput.value = '';
+    });
+
+    // ── Retirer l'image ──
+    removeBtn.addEventListener('click', () => clearImagePreview());
+
+    // ── Drag & Drop sur la zone de saisie ──
+    const dropZone = document.getElementById('message-input-area');
+    dropZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      inputWrap.classList.add('border-onkoz-accent');
+    });
+    dropZone.addEventListener('dragleave', () => {
+      inputWrap.classList.remove('border-onkoz-accent');
+    });
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      inputWrap.classList.remove('border-onkoz-accent');
+      const file = e.dataTransfer.files[0];
+      if (file && file.type.startsWith('image/')) setImagePreview(file);
+    });
+
+    // ── Drag & Drop sur la zone de messages ──
+    const contentArea = document.getElementById('content-area');
+    contentArea?.addEventListener('dragover', (e) => e.preventDefault());
+    contentArea?.addEventListener('drop', (e) => {
+      e.preventDefault();
+      const file = e.dataTransfer.files[0];
+      if (file && file.type.startsWith('image/')) {
+        setImagePreview(file);
+        msgInput?.focus();
+      }
+    });
+
+    // ── Coller depuis le presse-papier (Ctrl+V) ──
+    document.addEventListener('paste', (e) => {
+      // Seulement si on est dans un canal texte actif
+      if (!currentTextChannel) return;
+      const item = [...e.clipboardData.items].find(i => i.type.startsWith('image/'));
+      if (!item) return;
+      const file = item.getAsFile();
+      if (file) {
+        setImagePreview(file);
+        e.preventDefault();
+      }
+    });
+
+    function setImagePreview(file) {
+      // Validation type
+      const ALLOWED = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+      if (!ALLOWED.includes(file.type)) {
+        AudioSettings.showToast('❌ Format non supporté. JPG, PNG, GIF, WEBP uniquement.');
+        return;
+      }
+      // Validation taille
+      if (file.size > 10 * 1024 * 1024) {
+        AudioSettings.showToast('❌ Image trop lourde (max 10 Mo).');
+        return;
+      }
+
+      pendingImageFile = file;
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        previewThumb.src = e.target.result;
+        previewName.textContent = file.name || 'image.png';
+        previewSize.textContent = formatBytes(file.size);
+        previewBar.classList.remove('hidden');
+        previewBar.classList.add('flex');
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function clearImagePreview() {
+      pendingImageFile = null;
+      previewThumb.src = '';
+      previewBar.classList.add('hidden');
+      previewBar.classList.remove('flex');
+    }
+  }
+
+  function formatBytes(bytes) {
+    if (bytes < 1024)       return `${bytes} o`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} Ko`;
+    return `${(bytes / 1024 / 1024).toFixed(1)} Mo`;
+  }
+
+  // ── Upload et envoi ────────────────────────────────────────────────────────
+  async function sendMessage() {
+    const input   = document.getElementById('message-input');
     const content = input.value.trim();
-    if (!content) return;
-    socket.emit('chat:message', { channelId: currentTextChannel, content });
+
+    // Rien à envoyer
+    if (!content && !pendingImageFile) return;
+
+    // Si image en attente → uploader d'abord
+    if (pendingImageFile) {
+      await uploadAndSend(content);
+    } else {
+      socket.emit('chat:message', { channelId: currentTextChannel, content });
+    }
+
     input.value = '';
+    clearImagePreview();
+  }
+
+  async function uploadAndSend(caption) {
+    const sendBtn = document.getElementById('send-btn');
+
+    // Indicateur de chargement
+    sendBtn.textContent = '⏳';
+    sendBtn.disabled = true;
+
+    try {
+      const formData = new FormData();
+      formData.append('image', pendingImageFile);
+
+      const res  = await fetch('/api/upload', {
+        method:  'POST',
+        headers: { 'Authorization': `Bearer ${Auth.getToken()}` },
+        body:    formData,
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Erreur upload');
+      }
+
+      const { url } = await res.json();
+
+      // Envoyer le message avec l'URL de l'image comme contenu spécial
+      const content = caption
+        ? `${caption}\n[image:${url}]`
+        : `[image:${url}]`;
+
+      socket.emit('chat:message', { channelId: currentTextChannel, content });
+
+    } catch (err) {
+      AudioSettings.showToast(`❌ ${err.message}`);
+    } finally {
+      sendBtn.textContent = '↑';
+      sendBtn.disabled = false;
+    }
+  }
+
+  // ── Lightbox ───────────────────────────────────────────────────────────────
+  function initLightbox() {
+    const lb    = document.getElementById('lightbox');
+    const close = document.getElementById('lightbox-close');
+    if (!lb) return;
+    lb.addEventListener('click',  (e) => { if (e.target === lb) closeLightbox(); });
+    close.addEventListener('click', closeLightbox);
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeLightbox(); });
+  }
+
+  function openLightbox(src) {
+    const lb  = document.getElementById('lightbox');
+    const img = document.getElementById('lightbox-img');
+    const dl  = document.getElementById('lightbox-dl');
+    if (!lb) return;
+    img.src = src;
+    dl.href = src;
+    lb.classList.remove('hidden');
+    lb.classList.add('flex');
+  }
+
+  function closeLightbox() {
+    const lb = document.getElementById('lightbox');
+    lb?.classList.add('hidden');
+    lb?.classList.remove('flex');
+  }
+
+  function init(s) {
+    socket = s;
+    initImageUpload();
+    initLightbox();
+    initPinnedPanel();
   }
 
   // ── DM ────────────────────────────────────────────────────────────────────
@@ -232,5 +477,173 @@ const Chat = (() => {
     });
   }
 
-  return { init, joinTextChannel, onMessage, onDeleted, onReactionUpdate, sendMessage, openDM, onDMMessage, sendDM, closeDM, setupEphemeralText };
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  MESSAGES ÉPINGLÉS
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  let pinnedMessages = [];   // cache local des épinglés du canal courant
+
+  // ── Charger les épinglés du canal et mettre à jour le bouton header ────────
+  async function loadPinned(channelId) {
+    try {
+      const msgs = await fetch(`/api/channels/${channelId}/pinned`, {
+        headers: { 'Authorization': `Bearer ${Auth.getToken()}` },
+      }).then(r => r.json());
+      pinnedMessages = Array.isArray(msgs) ? msgs : [];
+    } catch { pinnedMessages = []; }
+    updatePinButton();
+  }
+
+  function updatePinButton() {
+    const btn   = document.getElementById('btn-pinned');
+    const count = document.getElementById('pin-count');
+    if (!btn) return;
+    if (pinnedMessages.length > 0) {
+      btn.classList.remove('hidden');
+      btn.classList.add('flex');
+      count.textContent = pinnedMessages.length;
+    } else {
+      btn.classList.add('hidden');
+      btn.classList.remove('flex');
+      closePinnedPanel();
+    }
+  }
+
+  // ── Ouvrir / Fermer le panneau ─────────────────────────────────────────────
+  function togglePinnedPanel() {
+    const panel = document.getElementById('pinned-panel');
+    if (!panel) return;
+    if (panel.classList.contains('hidden')) {
+      openPinnedPanel();
+    } else {
+      closePinnedPanel();
+    }
+  }
+
+  function openPinnedPanel() {
+    const panel = document.getElementById('pinned-panel');
+    const list  = document.getElementById('pinned-list');
+    const pcount= document.getElementById('pinned-panel-count');
+    if (!panel) return;
+
+    // Vider et remplir
+    list.innerHTML = '';
+    pcount.textContent = `(${pinnedMessages.length})`;
+
+    if (pinnedMessages.length === 0) {
+      list.innerHTML = '<p class="text-xs text-onkoz-text-muted text-center py-4">Aucun message épinglé</p>';
+    } else {
+      pinnedMessages.forEach(msg => {
+        const row = document.createElement('div');
+        row.className = 'flex items-start gap-3 px-4 py-2.5 hover:bg-onkoz-hover/40 transition-colors cursor-pointer';
+        row.title = 'Aller au message';
+        row.innerHTML = `
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2 mb-0.5">
+              <span class="text-xs font-bold text-onkoz-text">${UI.escapeHtml ? UI.escapeHtml(msg.username) : msg.username}</span>
+              <span class="text-[0.68rem] text-onkoz-text-muted">${UI.formatTime(msg.created_at)}</span>
+            </div>
+            <p class="text-xs text-onkoz-text-muted truncate">${(msg.content || '').replace(/\[image:[^\]]+\]/g, '🖼 Image')}</p>
+          </div>
+          ${(Auth.isMod() || Auth.isAdmin()) ? `
+          <button class="unpin-btn shrink-0 w-6 h-6 flex items-center justify-center rounded hover:bg-onkoz-danger/20 text-onkoz-text-muted hover:text-onkoz-danger transition-colors text-xs" data-id="${msg.id}" title="Désépingler">✕</button>
+          ` : ''}
+        `;
+
+        // Clic sur la ligne → scroller vers le message
+        row.addEventListener('click', (e) => {
+          if (e.target.closest('.unpin-btn')) return;
+          const msgEl = document.querySelector(`[data-msg-id="${msg.id}"]`);
+          if (msgEl) {
+            msgEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            // Highlight temporaire
+            msgEl.classList.add('ring-2', 'ring-onkoz-accent', 'ring-offset-1');
+            setTimeout(() => msgEl.classList.remove('ring-2', 'ring-onkoz-accent', 'ring-offset-1'), 2000);
+          }
+          closePinnedPanel();
+        });
+
+        // Bouton désépingler dans le panneau
+        row.querySelector('.unpin-btn')?.addEventListener('click', (e) => {
+          e.stopPropagation();
+          socket.emit('chat:unpin', { messageId: msg.id, channelId: currentTextChannel });
+        });
+
+        list.appendChild(row);
+      });
+    }
+
+    panel.classList.remove('hidden');
+    panel.classList.add('flex');
+  }
+
+  function closePinnedPanel() {
+    const panel = document.getElementById('pinned-panel');
+    panel?.classList.add('hidden');
+    panel?.classList.remove('flex');
+  }
+
+  // ── Initialiser les listeners du panneau ───────────────────────────────────
+  function initPinnedPanel() {
+    document.getElementById('btn-pinned')?.addEventListener('click', togglePinnedPanel);
+    document.getElementById('pinned-panel-close')?.addEventListener('click', closePinnedPanel);
+  }
+
+  // ── Socket events épinglage ────────────────────────────────────────────────
+  function onPinned({ message, channelId }) {
+    if (channelId != currentTextChannel) return;
+    // Mettre à jour le message dans le DOM
+    const el = document.querySelector(`[data-msg-id="${message.id}"]`);
+    if (el) {
+      el.classList.add('border-l-2', 'border-onkoz-accent', 'bg-onkoz-accent/5');
+      el.dataset.pinned = '1';
+      // Ajouter badge si absent
+      if (!el.querySelector('.pin-badge')) {
+        const header = el.querySelector('.flex.items-baseline');
+        if (header) {
+          const badge = document.createElement('span');
+          badge.className = 'pin-badge text-[0.68rem] text-onkoz-accent font-semibold';
+          badge.textContent = '📌 épinglé';
+          header.appendChild(badge);
+        }
+      }
+      // Mettre à jour le bouton pin
+      const pinBtn = el.querySelector('[title="Épingler"]');
+      if (pinBtn) {
+        pinBtn.title = 'Désépingler';
+        pinBtn.className = pinBtn.className.replace('text-onkoz-text-muted hover:bg-onkoz-accent/20 hover:text-onkoz-accent', 'text-onkoz-accent hover:bg-onkoz-danger/20 hover:text-onkoz-danger');
+      }
+    }
+    // Ajouter au cache local si absent
+    if (!pinnedMessages.find(m => m.id === message.id)) {
+      pinnedMessages.push(message);
+    }
+    updatePinButton();
+    AudioSettings.showToast('📌 Message épinglé');
+  }
+
+  function onUnpinned({ messageId, channelId }) {
+    if (channelId != currentTextChannel) return;
+    // Mettre à jour le DOM
+    const el = document.querySelector(`[data-msg-id="${messageId}"]`);
+    if (el) {
+      el.classList.remove('border-l-2', 'border-onkoz-accent', 'bg-onkoz-accent/5');
+      delete el.dataset.pinned;
+      el.querySelector('.pin-badge')?.remove();
+      const pinBtn = el.querySelector('[title="Désépingler"]');
+      if (pinBtn) {
+        pinBtn.title = 'Épingler';
+        pinBtn.className = pinBtn.className.replace('text-onkoz-accent hover:bg-onkoz-danger/20 hover:text-onkoz-danger', 'text-onkoz-text-muted hover:bg-onkoz-accent/20 hover:text-onkoz-accent');
+      }
+    }
+    // Retirer du cache
+    pinnedMessages = pinnedMessages.filter(m => m.id !== messageId);
+    updatePinButton();
+    // Mettre à jour le panneau si ouvert
+    const panel = document.getElementById('pinned-panel');
+    if (panel && !panel.classList.contains('hidden')) openPinnedPanel();
+    AudioSettings.showToast('📌 Message désépinglé');
+  }
+
+  return { init, joinTextChannel, onMessage, onDeleted, onReactionUpdate, sendMessage, openDM, onDMMessage, sendDM, closeDM, setupEphemeralText, onPinned, onUnpinned };
 })();

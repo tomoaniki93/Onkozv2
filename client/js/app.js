@@ -40,6 +40,8 @@ const App = (() => {
     socket.on('chat:message',      msg  => Chat.onMessage(msg));
     socket.on('chat:deleted',      data => Chat.onDeleted(data));
     socket.on('reaction:update',   data => Chat.onReactionUpdate(data));
+    socket.on('chat:pinned',       data => Chat.onPinned(data));
+    socket.on('chat:unpinned',     data => Chat.onUnpinned(data));
     socket.on('dm:message',        msg  => Chat.onDMMessage(msg));
     socket.on('voice:peer:joined', data => Voice.onPeerJoined(data));
     socket.on('voice:peer:left',   data => Voice.onPeerLeft(data));
