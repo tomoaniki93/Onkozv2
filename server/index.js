@@ -32,6 +32,10 @@ app.use(cors());
 app.use(express.json());
 
 // Fichiers statiques du client
+app.use((req, res, next) => {
+  try { decodeURIComponent(req.path); next(); }
+  catch { res.status(400).end(); }
+});
 app.use(express.static(path.join(__dirname, '..', 'client')));
 
 // Fichiers uploadés (images partagées)
