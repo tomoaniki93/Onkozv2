@@ -40,6 +40,7 @@ const AudioSettings = (() => {
     const panel = document.createElement('div');
     panel.id = 'audio-settings-panel';
     panel.className = 'fixed bottom-16 left-2 z-[150] w-80 bg-onkoz-surface border border-onkoz-border rounded-xl shadow-dm flex flex-col overflow-hidden';
+    panel.style.maxHeight = 'calc(100vh - 80px)';
 
     panel.innerHTML = `
       <!-- En-tête -->
@@ -49,7 +50,7 @@ const AudioSettings = (() => {
                 class="w-6 h-6 flex items-center justify-center rounded text-onkoz-text-muted hover:bg-onkoz-hover hover:text-onkoz-text transition-colors text-xs">✕</button>
       </div>
 
-      <div class="flex flex-col gap-5 p-4 overflow-y-auto">
+      <div class="flex flex-col gap-5 p-4 overflow-y-auto" style="scrollbar-width:thin;scrollbar-color:#3d3d5c transparent">
 
         <!-- ── MICROPHONE ── -->
         <div class="flex flex-col gap-2">
