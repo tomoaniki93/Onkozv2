@@ -146,6 +146,13 @@ function setupSocketHandlers(io) {
           .map(([pid, p]) => ({ peerId: pid, userId: p.userId, username: p.username }));
         socket.emit('voice:peers', peers);
 
+        // Envoyer aussi les producers actifs (audio + screen en cours)
+        const existingProducers = ms.getExistingProducers(roomId)
+          .filter(p => p.peerId !== socket.id);
+        if (existingProducers.length > 0) {
+          socket.emit('ms:existingProducers', existingProducers);
+        }
+
         emitVoiceMembers(channelId, io);
       } catch (err) {
         console.error('[voice:join]', err.message);
@@ -228,16 +235,23 @@ function setupSocketHandlers(io) {
       catch (err) { cb?.({ error: err.message }); }
     });
 
-    socket.on('ms:produce', async ({ roomId, transportId, kind, rtpParameters }, cb) => {
+    socket.on('ms:produce', async ({ roomId, transportId, kind, rtpParameters, appData }, cb) => {
       try {
-        const producerId = await ms.produce(roomId, socket.id, transportId, kind, rtpParameters);
-        socket.to(roomId).emit('ms:newProducer', { peerId: socket.id, userId, username, producerId });
+        const producerId = await ms.produce(roomId, socket.id, transportId, kind, rtpParameters, appData || {});
+        // Notifier tous les autres peers avec appData (pour distinguer audio/screen)
+        socket.to(roomId).emit('ms:newProducer', {
+          peerId: socket.id, userId, username, producerId, kind, appData: appData || {}
+        });
+        // Notification dédiée pour le partage d'écran
+        if (appData?.screenShare) {
+          socket.to(roomId).emit('screen:started', { peerId: socket.id, userId, username });
+        }
         cb?.({ producerId });
       } catch (err) { cb?.({ error: err.message }); }
     });
 
-    socket.on('ms:consume', async ({ roomId, producerPeerId, transportId, rtpCapabilities }, cb) => {
-      try { cb?.(await ms.consume(roomId, socket.id, producerPeerId, transportId, rtpCapabilities)); }
+    socket.on('ms:consume', async ({ roomId, producerPeerId, transportId, rtpCapabilities, producerId }, cb) => {
+      try { cb?.(await ms.consume(roomId, socket.id, producerPeerId, transportId, rtpCapabilities, producerId)); }
       catch (err) { cb?.({ error: err.message }); }
     });
 

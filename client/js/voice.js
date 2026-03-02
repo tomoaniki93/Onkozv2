@@ -12,7 +12,21 @@ const Voice = (() => {
   let isSharing       = false;
   let screenConsumers = new Map(); // peerId → consumer
 
-  function init(s) { socket = s; }
+  function init(s) {
+    socket = s;
+
+    socket.on('ms:existingProducers', (producers) => {
+      if (!recvTransport || !device) {
+        producers.forEach(p => pendingPeers.push(p));
+        return;
+      }
+      producers.forEach(p => handleNewProducer(p));
+    });
+
+    socket.on('screen:started', ({ username }) => {
+      AudioSettings.showToast('\u{1F5A5}\uFE0F ' + username + ' partage son ecran');
+    });
+  }
 
   // ── Rejoindre un salon vocal ───────────────────────────────────────────────
   async function joinRoom(channelId, type, roomId, channelName) {
@@ -81,16 +95,18 @@ const Voice = (() => {
   }
 
   // ── Consommer un producer distant ─────────────────────────────────────────
-  async function handleNewProducer({ peerId, username, appData }) {
+  async function handleNewProducer({ peerId, username, producerId, appData }) {
     if (!recvTransport || !device) return;
     try {
       const data = await socketEmit('ms:consume', {
         roomId: currentRoomId, producerPeerId: peerId,
         transportId: recvTransport.id, rtpCapabilities: device.rtpCapabilities,
+        producerId, // passer le producerId exact pour multi-producer
       });
       const consumer = await recvTransport.consume(data);
+      const isScreen = appData?.screenShare || data.appData?.screenShare || consumer.track.kind === 'video';
 
-      if (consumer.track.kind === 'video') {
+      if (isScreen) {
         // ── Flux vidéo = partage d'écran ──
         screenConsumers.set(peerId, consumer);
         showScreenOverlay(consumer.track, peerId, username || peerId);

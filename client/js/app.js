@@ -45,8 +45,9 @@ const App = (() => {
     socket.on('dm:message',        msg  => Chat.onDMMessage(msg));
     socket.on('voice:peer:joined', data => Voice.onPeerJoined(data));
     socket.on('voice:peer:left',   data => Voice.onPeerLeft(data));
-    socket.on('screen:stopped',    ({ peerId }) => {
+    socket.on('screen:stopped', ({ peerId, username }) => {
       document.getElementById(`screen-overlay-${peerId}`)?.remove();
+      if (username) AudioSettings.showToast(`⏹️ ${username} a arrêté le partage`);
     });
     socket.on('voice:peers',       peers => Voice.onExistingPeers(peers));
     socket.on('kicked', () => { alert('Vous avez été expulsé.'); API.clearToken(); location.reload(); });

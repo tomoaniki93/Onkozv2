@@ -112,29 +112,38 @@ async function connectTransport(roomId, transportId, dtlsParameters) {
 }
 
 // ── Produce ───────────────────────────────────────────────────────────────────
-async function produce(roomId, peerId, transportId, kind, rtpParameters) {
+async function produce(roomId, peerId, transportId, kind, rtpParameters, appData) {
   const room = rooms.get(roomId);
   if (!room) throw new Error('Salle introuvable');
   const transport = room.transports.get(transportId);
   if (!transport) throw new Error('Transport introuvable');
 
-  const producer = await transport.produce({ kind, rtpParameters });
-  room.producers.set(peerId, producer);
+  const producer = await transport.produce({ kind, rtpParameters, appData: appData || {} });
+
+  // Stocker dans une Map par peerId → Map<producerId → {producer, kind, appData}>
+  if (!room.producers.has(peerId)) room.producers.set(peerId, new Map());
+  room.producers.get(peerId).set(producer.id, { producer, kind, appData: appData || {} });
 
   producer.on('transportclose', () => {
-    room.producers.delete(peerId);
+    room.producers.get(peerId)?.delete(producer.id);
+    if (room.producers.get(peerId)?.size === 0) room.producers.delete(peerId);
   });
 
   return producer.id;
 }
 
 // ── Consume ───────────────────────────────────────────────────────────────────
-async function consume(roomId, consumerPeerId, producerPeerId, transportId, rtpCapabilities) {
+async function consume(roomId, consumerPeerId, producerPeerId, transportId, rtpCapabilities, producerId) {
   const room = rooms.get(roomId);
   if (!room) throw new Error('Salle introuvable');
 
-  const producer  = room.producers.get(producerPeerId);
-  if (!producer) throw new Error('Producteur introuvable');
+  const peerProducers = room.producers.get(producerPeerId);
+  if (!peerProducers || peerProducers.size === 0) throw new Error('Producteur introuvable');
+
+  // Chercher par producerId exact, sinon prendre le premier
+  let entry = producerId ? peerProducers.get(producerId) : peerProducers.values().next().value;
+  if (!entry) throw new Error('Producteur introuvable');
+  const producer = entry.producer;
 
   if (!room.router.canConsume({ producerId: producer.id, rtpCapabilities })) {
     throw new Error('Impossible de consommer ce producteur');
@@ -159,6 +168,7 @@ async function consume(roomId, consumerPeerId, producerPeerId, transportId, rtpC
     producerId:    producer.id,
     kind:          consumer.kind,
     rtpParameters: consumer.rtpParameters,
+    appData:       entry.appData || {},
   };
 }
 
@@ -167,14 +177,16 @@ function peerLeft(roomId, peerId) {
   const room = rooms.get(roomId);
   if (!room) return;
 
-  // Fermer le producer du peer
-  const producer = room.producers.get(peerId);
-  if (producer) {
-    try { producer.close(); } catch {}
+  // Fermer tous les producers du peer (audio + screen)
+  const peerProducers = room.producers.get(peerId);
+  if (peerProducers) {
+    for (const { producer } of peerProducers.values()) {
+      try { producer.close(); } catch {}
+    }
     room.producers.delete(peerId);
   }
 
-  // Retirer le peer
+  // Retirer le peer et ses transports
   const peer = room.peers.get(peerId);
   if (peer) {
     for (const tId of peer.transportIds) {
@@ -184,8 +196,23 @@ function peerLeft(roomId, peerId) {
     room.peers.delete(peerId);
   }
 
-  // Salle vide → supprimer si éphémère (géré côté socket)
   return room.peers.size;
+}
+
+// ── Lister tous les producers actifs dans une salle ───────────────────────────
+// Utilisé pour envoyer les producers existants à un peer qui rejoint
+function getExistingProducers(roomId) {
+  const room = rooms.get(roomId);
+  if (!room) return [];
+
+  const result = [];
+  for (const [peerId, producerMap] of room.producers.entries()) {
+    for (const [producerId, { kind, appData }] of producerMap.entries()) {
+      const peer = room.peers.get(peerId);
+      result.push({ peerId, producerId, kind, appData, username: peer?.username || '' });
+    }
+  }
+  return result;
 }
 
 module.exports = {
@@ -198,5 +225,6 @@ module.exports = {
   produce,
   consume,
   peerLeft,
+  getExistingProducers,
   rooms,
 };
