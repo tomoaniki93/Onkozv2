@@ -309,7 +309,7 @@ const Chat = (() => {
 
     const card = document.createElement('div');
     card.className = 'max-w-sm rounded-lg overflow-hidden border border-onkoz-border bg-onkoz-surface hover:border-onkoz-border-lt transition-colors cursor-pointer';
-    card.style.cssText = 'border-left: 3px solid var(--onkoz-accent, #7c5cbf)';
+    card.style.cssText = 'border-left: 3px solid var(--onkoz-accent, #7c5cbf); width: 320px;';
 
     // Image directe
     if (isImage) {
@@ -326,11 +326,11 @@ const Chat = (() => {
       const thumb = document.createElement('div');
       thumb.className = 'relative';
       thumb.innerHTML = `
-        <img src="${data.image}" alt="" class="w-full object-cover max-h-40" loading="lazy"
+        <img src="${data.image}" alt="" class="w-full object-cover" style="height:160px"
              onerror="this.parentElement.style.display='none'" />
         <div class="absolute inset-0 flex items-center justify-center bg-black/40 hover:bg-black/30 transition-colors">
-          <div class="w-12 h-12 bg-red-600 rounded-full flex items-center justify-center shadow-lg">
-            <svg viewBox="0 0 24 24" fill="white" width="20" height="20"><path d="M8 5v14l11-7z"/></svg>
+          <div class="w-10 h-10 bg-red-600 rounded-full flex items-center justify-center shadow-lg">
+            <svg viewBox="0 0 24 24" fill="white" width="16" height="16"><path d="M8 5v14l11-7z"/></svg>
           </div>
         </div>`;
       thumb.addEventListener('click', () => window.open(data.url, '_blank', 'noopener'));
@@ -339,7 +339,8 @@ const Chat = (() => {
       // Image OG normale
       const img = document.createElement('img');
       img.src = data.image;
-      img.className = 'w-full object-cover max-h-32';
+      img.className = 'w-full object-cover';
+      img.style.height = '120px';
       img.loading = 'lazy';
       img.onerror = () => img.remove();
       card.appendChild(img);
