@@ -91,9 +91,10 @@ const Chat = (() => {
     const imgMatches = [...rawContent.matchAll(IMG_RE)];
 
     if (textPart) {
-      const t = document.createElement('p');
-      t.textContent = textPart;
-      content.appendChild(t);
+      const p = document.createElement('p');
+      // Rendre les URLs cliquables
+      p.innerHTML = linkify(textPart);
+      content.appendChild(p);
     }
 
     imgMatches.forEach(([, url]) => {
@@ -113,6 +114,20 @@ const Chat = (() => {
       imgWrap.appendChild(img);
       content.appendChild(imgWrap);
     });
+
+    // Prévisualisations de liens (chargées async)
+    const previewContainer = document.createElement('div');
+    previewContainer.className = 'mt-1 flex flex-col gap-2';
+    content.appendChild(previewContainer);
+
+    // Extraire les URLs du texte pour les prévisualiser
+    if (textPart) {
+      const urls = extractUrls(textPart);
+      if (urls.length > 0) {
+        // Prévisualiser max 3 URLs par message
+        urls.slice(0, 3).forEach(url => fetchAndRenderPreview(url, previewContainer, area, scroll));
+      }
+    }
 
     // Zone réactions
     const reactionsEl = document.createElement('div');
@@ -197,6 +212,144 @@ const Chat = (() => {
 
   function onDeleted({ messageId }) {
     document.querySelector(`[data-msg-id="${messageId}"]`)?.remove();
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  PRÉVISUALISATION DE LIENS
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  const URL_RE = /https?:\/\/[^\s<>"')\]]+/g;
+
+  function extractUrls(text) {
+    return [...new Set((text.match(URL_RE) || []))];
+  }
+
+  // Rend les URLs cliquables dans un texte (échappe le HTML)
+  function linkify(text) {
+    const escaped = text
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+    return escaped.replace(URL_RE, url =>
+      `<a href="${url}" target="_blank" rel="noopener noreferrer"
+          class="text-onkoz-accent hover:underline break-all">${url}</a>`
+    );
+  }
+
+  // Cache preview côté client
+  const previewCache = new Map();
+
+  async function fetchAndRenderPreview(url, container, scrollArea, doScroll) {
+    // Pas de preview pour les uploads locaux
+    if (url.startsWith('/uploads/')) return;
+
+    try {
+      let data;
+      if (previewCache.has(url)) {
+        data = previewCache.get(url);
+      } else {
+        const res = await fetch(`/api/preview?url=${encodeURIComponent(url)}`, {
+          headers: { 'Authorization': `Bearer ${Auth.getToken()}` },
+        });
+        if (!res.ok || res.status === 204) return;
+        data = await res.json();
+        previewCache.set(url, data);
+      }
+
+      if (!data || (!data.title && !data.image)) return;
+
+      const card = renderPreviewCard(data);
+      container.appendChild(card);
+
+      // Rescroller si on était en bas
+      if (doScroll && scrollArea) scrollArea.scrollTop = scrollArea.scrollHeight;
+
+    } catch { /* silencieux */ }
+  }
+
+  function renderPreviewCard(data) {
+    const isYoutube = data.type === 'video' && data.videoId;
+    const isImage   = data.type === 'image' && !data.title;
+
+    const card = document.createElement('div');
+    card.className = 'max-w-sm rounded-lg overflow-hidden border border-onkoz-border bg-onkoz-surface hover:border-onkoz-border-lt transition-colors cursor-pointer';
+    card.style.cssText = 'border-left: 3px solid var(--onkoz-accent, #7c5cbf)';
+
+    // Image directe
+    if (isImage) {
+      const img = document.createElement('img');
+      img.src = data.image;
+      img.className = 'max-w-xs max-h-64 rounded-lg object-cover cursor-zoom-in hover:opacity-90 transition-opacity';
+      img.loading = 'lazy';
+      img.addEventListener('click', () => openLightbox(data.image));
+      return img;
+    }
+
+    // Vignette YouTube avec bouton play
+    if (isYoutube && data.image) {
+      const thumb = document.createElement('div');
+      thumb.className = 'relative';
+      thumb.innerHTML = `
+        <img src="${data.image}" alt="" class="w-full object-cover max-h-40" loading="lazy"
+             onerror="this.parentElement.style.display='none'" />
+        <div class="absolute inset-0 flex items-center justify-center bg-black/40 hover:bg-black/30 transition-colors">
+          <div class="w-12 h-12 bg-red-600 rounded-full flex items-center justify-center shadow-lg">
+            <svg viewBox="0 0 24 24" fill="white" width="20" height="20"><path d="M8 5v14l11-7z"/></svg>
+          </div>
+        </div>`;
+      thumb.addEventListener('click', () => window.open(data.url, '_blank', 'noopener'));
+      card.appendChild(thumb);
+    } else if (data.image) {
+      // Image OG normale
+      const img = document.createElement('img');
+      img.src = data.image;
+      img.className = 'w-full object-cover max-h-32';
+      img.loading = 'lazy';
+      img.onerror = () => img.remove();
+      card.appendChild(img);
+    }
+
+    // Texte
+    const info = document.createElement('div');
+    info.className = 'px-3 py-2';
+
+    // Site name + favicon
+    if (data.siteName) {
+      const site = document.createElement('div');
+      site.className = 'flex items-center gap-1.5 mb-1';
+      if (data.favicon) {
+        const fav = document.createElement('img');
+        fav.src = data.favicon;
+        fav.className = 'w-3.5 h-3.5 rounded-sm object-contain';
+        fav.onerror = () => fav.remove();
+        site.appendChild(fav);
+      }
+      const siteTxt = document.createElement('span');
+      siteTxt.className = 'text-[0.68rem] font-semibold text-onkoz-text-muted uppercase tracking-wide';
+      siteTxt.textContent = data.siteName;
+      site.appendChild(siteTxt);
+      info.appendChild(site);
+    }
+
+    if (data.title) {
+      const title = document.createElement('p');
+      title.className = 'text-[0.85rem] font-semibold text-onkoz-accent hover:underline line-clamp-2 leading-snug';
+      title.textContent = data.title;
+      info.appendChild(title);
+    }
+
+    if (data.description) {
+      const desc = document.createElement('p');
+      desc.className = 'text-[0.75rem] text-onkoz-text-muted mt-0.5 line-clamp-2 leading-relaxed';
+      desc.textContent = data.description;
+      info.appendChild(desc);
+    }
+
+    card.appendChild(info);
+    card.addEventListener('click', (e) => {
+      if (!e.target.closest('img[class*="zoom"]')) window.open(data.url, '_blank', 'noopener');
+    });
+
+    return card;
   }
 
   // ═══════════════════════════════════════════════════════════════════════════

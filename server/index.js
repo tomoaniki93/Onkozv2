@@ -16,6 +16,7 @@ const channelRoutes  = require('./routes/channels');
 const userRoutes      = require('./routes/users');
 const categoryRoutes  = require('./routes/categories');
 const uploadRoutes    = require('./routes/upload');
+const previewRoutes   = require('./routes/preview');
 
 const PORT = process.env.PORT || 3000;
 
@@ -42,6 +43,7 @@ app.use('/api/channels', channelRoutes);
 app.use('/api/users',      userRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/upload',     uploadRoutes);
+app.use('/api/preview',   previewRoutes);
 
 // Health check
 app.get('/api/health', (_, res) => res.json({ status: 'ok', ts: Date.now() }));
