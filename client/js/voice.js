@@ -75,6 +75,7 @@ const Voice = (() => {
       return;
     }
 
+    socket.off('ms:newProducer', handleNewProducer); // évite les doublons si rejoin
     socket.on('ms:newProducer', handleNewProducer);
     updateMuteBtn();
   }

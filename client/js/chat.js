@@ -490,6 +490,18 @@ const Chat = (() => {
     }
   }
 
+  // Réinitialisation de la prévisualisation accessible depuis sendMessage
+  function resetImagePreview() {
+    pendingImageFile = null;
+    const previewBar   = document.getElementById('img-preview-bar');
+    const previewThumb = document.getElementById('img-preview-thumb');
+    if (previewThumb) previewThumb.src = '';
+    if (previewBar) {
+      previewBar.classList.add('hidden');
+      previewBar.classList.remove('flex');
+    }
+  }
+
   function formatBytes(bytes) {
     if (bytes < 1024)       return `${bytes} o`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} Ko`;
@@ -512,7 +524,7 @@ const Chat = (() => {
     }
 
     input.value = '';
-    clearImagePreview();
+    resetImagePreview();
   }
 
   async function uploadAndSend(caption) {

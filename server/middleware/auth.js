@@ -1,7 +1,16 @@
 'use strict';
 const jwt = require('jsonwebtoken');
 
-const SECRET = () => process.env.JWT_SECRET || 'onkoz_dev_secret';
+const SECRET = () => {
+  const s = process.env.JWT_SECRET;
+  if (!s) {
+    if (process.env.NODE_ENV === 'production') {
+      console.error('[SECURITY] JWT_SECRET non défini en production ! Définissez-le dans .env');
+    }
+    return 'onkoz_dev_secret';
+  }
+  return s;
+};
 
 function signToken(payload) {
   return jwt.sign(payload, SECRET(), { expiresIn: '30d' });
@@ -27,7 +36,10 @@ function requireAuth(req, res, next) {
 
 function requireRole(...roles) {
   return (req, res, next) => {
-    if (!roles.includes(req.user?.role)) {
+    const userRole = req.user?.role;
+    // Admin a toujours tous les droits
+    if (userRole === 'admin') return next();
+    if (!roles.includes(userRole)) {
       return res.status(403).json({ error: 'Permission insuffisante' });
     }
     next();

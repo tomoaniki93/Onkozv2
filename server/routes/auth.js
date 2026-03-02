@@ -6,6 +6,40 @@ const { signToken, requireAuth } = require('../middleware/auth');
 
 const router = express.Router();
 
+// ── Rate limiting simple (sans dépendance externe) ────────────────────────────
+// Max 10 tentatives par IP par fenêtre de 15 minutes
+const loginAttempts = new Map();
+const RATE_WINDOW   = 15 * 60 * 1000; // 15 min
+const RATE_MAX      = 10;
+
+function rateLimitAuth(req, res, next) {
+  const ip  = req.ip || req.socket.remoteAddress || 'unknown';
+  const now = Date.now();
+  const rec = loginAttempts.get(ip) || { count: 0, reset: now + RATE_WINDOW };
+
+  if (now > rec.reset) {
+    rec.count = 0;
+    rec.reset = now + RATE_WINDOW;
+  }
+
+  rec.count++;
+  loginAttempts.set(ip, rec);
+
+  if (rec.count > RATE_MAX) {
+    const retry = Math.ceil((rec.reset - now) / 1000);
+    return res.status(429).json({ error: `Trop de tentatives. Réessayez dans ${retry}s.` });
+  }
+  next();
+}
+
+// Nettoyage périodique du map (toutes les heures)
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, rec] of loginAttempts.entries()) {
+    if (now > rec.reset) loginAttempts.delete(ip);
+  }
+}, 60 * 60 * 1000);
+
 // ── Vérification pseudo disponible ───────────────────────────────────────────
 router.get('/check-username/:username', (req, res) => {
   const db   = getDb();
@@ -31,7 +65,7 @@ router.post('/setup', (req, res) => {
 });
 
 // ── Inscription (première connexion : choix pseudo + mdp) ────────────────────
-router.post('/register', (req, res) => {
+router.post('/register', rateLimitAuth, (req, res) => {
   const db = getDb();
   const { username, password } = req.body;
 
@@ -50,7 +84,7 @@ router.post('/register', (req, res) => {
 });
 
 // ── Connexion ─────────────────────────────────────────────────────────────────
-router.post('/login', (req, res) => {
+router.post('/login', rateLimitAuth, (req, res) => {
   const db = getDb();
   const { username, password } = req.body;
 

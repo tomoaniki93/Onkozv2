@@ -12,13 +12,17 @@ const router  = express.Router();
 const cache   = new Map();
 const CACHE_TTL = 30 * 60 * 1000;
 
-// Domaines bloqués (boucles internes, etc.)
-const BLOCKED = ['localhost', '127.0.0.1', '0.0.0.0', '::1'];
+// Domaines et IPs bloqués (SSRF protection)
+const BLOCKED_HOSTNAMES = ['localhost', 'onkoz.fr'];
+const BLOCKED_IP_RE = /^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|127\.|0\.0\.0\.0|::1|fc00:|fe80:)/;
 
 function isBlocked(url) {
   try {
-    const { hostname } = new URL(url);
-    return BLOCKED.some(b => hostname.includes(b));
+    const { hostname, protocol } = new URL(url);
+    if (!['http:', 'https:'].includes(protocol)) return true;
+    if (BLOCKED_HOSTNAMES.some(b => hostname === b || hostname.endsWith('.' + b))) return true;
+    if (BLOCKED_IP_RE.test(hostname)) return true;
+    return false;
   } catch { return true; }
 }
 

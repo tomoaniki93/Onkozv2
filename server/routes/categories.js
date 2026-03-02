@@ -27,7 +27,7 @@ router.get('/', requireAuth, (req, res) => {
     ...cat,
     channels: JSON.parse(cat.channels_json).filter(c => c.id !== null),
   }));
-  delete result.forEach(r => delete r.channels_json);
+  result.forEach(r => delete r.channels_json);
 
   // Salons sans catégorie
   const uncategorized = db.prepare(`
