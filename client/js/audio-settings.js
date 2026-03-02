@@ -16,6 +16,9 @@ const AudioSettings = (() => {
   let testAudio  = null;   // élément Audio pour le test casque
   let isTestingMic     = false;
   let isTestingSpeaker = false;
+  let isLoopbackActive = false;
+  let loopbackStream   = null;
+  let loopbackCtx      = null;
 
   // ── API publique utilisée par voice.js ─────────────────────────────────────
   function getMicId()     { return localStorage.getItem(KEY_MIC)     || 'default'; }
@@ -29,8 +32,7 @@ const AudioSettings = (() => {
   }
 
   function closePanel() {
-    stopMicTest();
-    stopSpeakerTest();
+    stopAllTests();
     document.getElementById('audio-settings-panel')?.remove();
   }
 
@@ -74,6 +76,24 @@ const AudioSettings = (() => {
                   class="flex items-center justify-center gap-2 text-xs font-semibold py-2 px-3 rounded-md border border-onkoz-border text-onkoz-text-md hover:bg-onkoz-hover transition-colors">
             🎙 Tester le microphone
           </button>
+
+          <!-- Bouton loopback (s'écouter) -->
+          <button id="btn-loopback"
+                  class="flex items-center justify-center gap-2 text-xs font-semibold py-2 px-3 rounded-md border border-onkoz-border text-onkoz-text-md hover:bg-onkoz-hover transition-colors">
+            🔁 S'écouter (loopback)
+          </button>
+
+          <!-- Délai loopback -->
+          <div id="loopback-controls" class="hidden flex-col gap-1.5">
+            <div class="flex justify-between">
+              <span class="text-[0.7rem] text-onkoz-text-muted">Délai d'écoute</span>
+              <span id="loopback-delay-label" class="text-[0.7rem] text-onkoz-text-muted font-mono">200 ms</span>
+            </div>
+            <input id="loopback-delay-slider" type="range" min="0" max="500" value="200" step="10"
+                   class="w-full accent-onkoz-accent cursor-pointer" />
+            <p class="text-[0.65rem] text-onkoz-text-muted">Un léger délai évite l'effet larsen. Mettez 0 si vous utilisez un casque.</p>
+          </div>
+
           <p id="mic-status" class="text-[0.72rem] text-center text-onkoz-text-muted hidden"></p>
         </div>
 
@@ -197,7 +217,15 @@ const AudioSettings = (() => {
     document.getElementById('close-audio-panel').addEventListener('click', closePanel);
     document.getElementById('btn-save-audio').addEventListener('click', saveAndClose);
     document.getElementById('btn-test-mic').addEventListener('click', toggleMicTest);
+    document.getElementById('btn-loopback').addEventListener('click', toggleLoopback);
     document.getElementById('btn-test-speaker').addEventListener('click', toggleSpeakerTest);
+
+    // Init label délai loopback
+    const delaySlider = document.getElementById('loopback-delay-slider');
+    const delayLabel  = document.getElementById('loopback-delay-label');
+    if (delaySlider && delayLabel) {
+      delayLabel.textContent = `${delaySlider.value} ms`;
+    }
 
     document.getElementById('volume-slider').addEventListener('input', e => {
       document.getElementById('volume-label').textContent = `${e.target.value}%`;
@@ -360,6 +388,91 @@ const AudioSettings = (() => {
     };
 
     frame();
+  }
+
+  // ── LOOPBACK (s'écouter) ─────────────────────────────────────────────────
+  async function toggleLoopback() {
+    isLoopbackActive ? stopLoopback() : await startLoopback();
+  }
+
+  async function startLoopback() {
+    const micId      = document.getElementById('mic-select').value;
+    const speakerId  = document.getElementById('speaker-select').value;
+    const delayMs    = parseInt(document.getElementById('loopback-delay-slider')?.value || 200);
+    const btn        = document.getElementById('btn-loopback');
+    const controls   = document.getElementById('loopback-controls');
+    const status     = document.getElementById('mic-status');
+
+    try {
+      loopbackStream = await navigator.mediaDevices.getUserMedia({
+        audio: micId ? { deviceId: { exact: micId }, echoCancellation: false, noiseSuppression: false } : true,
+        video: false,
+      });
+
+      loopbackCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const source = loopbackCtx.createMediaStreamSource(loopbackStream);
+
+      // Nœud de délai pour éviter le larsen (utile sans casque)
+      const delay = loopbackCtx.createDelay(1.0);
+      delay.delayTime.value = delayMs / 1000;
+
+      // Volume de sortie
+      const gain = loopbackCtx.createGain();
+      gain.gain.value = parseInt(document.getElementById('volume-slider')?.value || 100) / 100;
+
+      source.connect(delay);
+      delay.connect(gain);
+
+      // Destination : casque sélectionné si possible (Chrome/Edge)
+      if (speakerId && loopbackCtx.destination.setSinkId) {
+        try { await loopbackCtx.destination.setSinkId(speakerId); } catch { /* pas supporté */ }
+      }
+      gain.connect(loopbackCtx.destination);
+
+      isLoopbackActive = true;
+      btn.textContent = '⏹ Arrêter l\'écoute';
+      btn.classList.add('bg-onkoz-danger/20', 'border-onkoz-danger', 'text-onkoz-danger');
+      controls.classList.remove('hidden');
+      controls.classList.add('flex');
+      status.textContent = '🎧 Loopback actif — vous vous entendez en temps réel';
+      status.classList.remove('hidden');
+
+      // Slider délai dynamique
+      document.getElementById('loopback-delay-slider')?.addEventListener('input', function () {
+        delay.delayTime.value = parseInt(this.value) / 1000;
+        const lbl = document.getElementById('loopback-delay-label');
+        if (lbl) lbl.textContent = `${this.value} ms`;
+      });
+
+    } catch (err) {
+      const status = document.getElementById('mic-status');
+      status.textContent = `❌ ${err.message}`;
+      status.classList.remove('hidden');
+    }
+  }
+
+  function stopLoopback() {
+    loopbackStream?.getTracks().forEach(t => t.stop());
+    loopbackCtx?.close();
+    loopbackStream = loopbackCtx = null;
+    isLoopbackActive = false;
+
+    const btn      = document.getElementById('btn-loopback');
+    const controls = document.getElementById('loopback-controls');
+    const status   = document.getElementById('mic-status');
+    if (btn) {
+      btn.textContent = '🔁 S\'écouter (loopback)';
+      btn.classList.remove('bg-onkoz-danger/20', 'border-onkoz-danger', 'text-onkoz-danger');
+    }
+    if (controls) { controls.classList.add('hidden'); controls.classList.remove('flex'); }
+    if (status)   { status.classList.add('hidden'); }
+  }
+
+  // Arrêter le loopback si le panel se ferme
+  function stopAllTests() {
+    if (isTestingMic)     stopMicTest();
+    if (isTestingSpeaker) stopSpeakerTest();
+    if (isLoopbackActive) stopLoopback();
   }
 
   // ── TEST CASQUE (bip synthétique) ─────────────────────────────────────────
