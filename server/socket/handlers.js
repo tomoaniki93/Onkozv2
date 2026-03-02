@@ -28,6 +28,14 @@ function setupSocketHandlers(io) {
     socket.broadcast.emit('user:online', { userId, username });
     socket.emit('online:list', [...onlineUsers.keys()]);
 
+    // Envoyer l'état actuel de tous les salons vocaux occupés
+    for (const [channelId, membersMap] of voiceMembers.entries()) {
+      if (membersMap.size > 0) {
+        const members = [...membersMap.entries()].map(([id, name]) => ({ userId: id, username: name }));
+        socket.emit('voice:members', { channelId, members });
+      }
+    }
+
     // ── CHAT TEXTUEL ──────────────────────────────────────────────────────────
 
     socket.on('chat:join', (channelId) => {
