@@ -239,16 +239,55 @@ const Chat = (() => {
   const previewCache = new Map();
 
   async function fetchAndRenderPreview(url, container, scrollArea, doScroll) {
-    // Pas de preview pour les uploads locaux
     if (url.startsWith('/uploads/')) return;
 
     try {
       let data;
+
+      // ── Fallback YouTube côté client (pas besoin du serveur) ──────────────
+      const ytMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+      if (ytMatch) {
+        data = {
+          title:       null,   // sera rempli si le serveur répond
+          description: null,
+          image:       `https://img.youtube.com/vi/${ytMatch[1]}/hqdefault.jpg`,
+          siteName:    'YouTube',
+          favicon:     'https://www.youtube.com/favicon.ico',
+          type:        'video',
+          videoId:     ytMatch[1],
+          url,
+        };
+        // Essayer quand même le serveur pour récupérer le vrai titre
+        try {
+          const res = await fetch(`/api/preview?url=${encodeURIComponent(url)}`, {
+            headers: { 'Authorization': `Bearer ${Auth.getToken()}` },
+            signal: AbortSignal.timeout(4000),
+          });
+          if (res.ok && res.status !== 204) {
+            const serverData = await res.json();
+            if (serverData?.title) data = serverData;
+          }
+        } catch { /* utilise le fallback */ }
+
+        if (previewCache.has(url)) {
+          data = previewCache.get(url);
+        } else {
+          previewCache.set(url, data);
+        }
+
+        const card = renderPreviewCard(data);
+        container.appendChild(card);
+        if (doScroll && scrollArea) scrollArea.scrollTop = scrollArea.scrollHeight;
+        return;
+      }
+
+      // ── Autres URLs : appel serveur ───────────────────────────────────────
       if (previewCache.has(url)) {
         data = previewCache.get(url);
       } else {
         const res = await fetch(`/api/preview?url=${encodeURIComponent(url)}`, {
           headers: { 'Authorization': `Bearer ${Auth.getToken()}` },
+          signal: AbortSignal.timeout(8000),
         });
         if (!res.ok || res.status === 204) return;
         data = await res.json();
@@ -259,8 +298,6 @@ const Chat = (() => {
 
       const card = renderPreviewCard(data);
       container.appendChild(card);
-
-      // Rescroller si on était en bas
       if (doScroll && scrollArea) scrollArea.scrollTop = scrollArea.scrollHeight;
 
     } catch { /* silencieux */ }
