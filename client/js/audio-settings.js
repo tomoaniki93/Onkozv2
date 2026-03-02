@@ -162,13 +162,16 @@ const AudioSettings = (() => {
 
         <!-- ── RÉDUCTION DE BRUIT ── -->
         <div class="flex flex-col gap-3">
-          <p class="text-[0.72rem] font-bold uppercase tracking-wider text-onkoz-text-muted">🔇 Réduction de bruit</p>
+          <div class="flex items-center justify-between">
+            <p class="text-[0.72rem] font-bold uppercase tracking-wider text-onkoz-text-muted">🔇 Réduction de bruit</p>
+            <span id="nr-engine-badge" class="text-[0.65rem] font-bold px-2 py-0.5 rounded-full bg-onkoz-accent/20 text-onkoz-accent hidden">RNNoise IA</span>
+          </div>
 
           <!-- Toggle activé/désactivé -->
           <div class="flex items-center justify-between">
             <div>
               <p class="text-sm text-onkoz-text font-medium">Filtrage actif</p>
-              <p class="text-[0.68rem] text-onkoz-text-muted">Atténue bruits ambiants, clavier, télé</p>
+              <p class="text-[0.68rem] text-onkoz-text-muted">Supprime bruits de fond, bras de micro, clavier</p>
             </div>
             <button id="nr-toggle"
                     class="relative w-11 h-6 rounded-full transition-colors duration-200 focus:outline-none shrink-0">
@@ -176,7 +179,24 @@ const AudioSettings = (() => {
             </button>
           </div>
 
-          <!-- Slider intensité -->
+          <!-- Choix du moteur -->
+          <div id="nr-engine-section" class="flex flex-col gap-1.5">
+            <span class="text-[0.7rem] text-onkoz-text-muted">Moteur de filtrage</span>
+            <div class="grid grid-cols-2 gap-2">
+              <button id="nr-engine-rnnoise"
+                      class="flex flex-col items-center gap-0.5 px-2 py-2 rounded-md border text-xs font-semibold transition-colors">
+                <span>🤖 RNNoise</span>
+                <span class="text-[0.62rem] font-normal opacity-70">Deep learning</span>
+              </button>
+              <button id="nr-engine-gate"
+                      class="flex flex-col items-center gap-0.5 px-2 py-2 rounded-md border text-xs font-semibold transition-colors">
+                <span>⚙️ Noise gate</span>
+                <span class="text-[0.62rem] font-normal opacity-70">Classique</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Slider intensité (affiché uniquement en mode gate) -->
           <div id="nr-intensity-section" class="flex flex-col gap-2">
             <div class="flex justify-between items-center">
               <span class="text-[0.7rem] text-onkoz-text-muted">Intensité</span>
@@ -184,7 +204,6 @@ const AudioSettings = (() => {
             </div>
             <input id="nr-intensity" type="range" min="1" max="3" step="1"
                    class="w-full accent-onkoz-accent cursor-pointer" />
-            <!-- Étiquettes -->
             <div class="flex justify-between text-[0.65rem] text-onkoz-text-muted px-0.5">
               <span>Léger</span>
               <span>Modéré</span>
@@ -575,50 +594,90 @@ const AudioSettings = (() => {
 
   // ── Contrôles réduction de bruit ─────────────────────────────────────────
   function initNoiseReducerControls() {
-    const toggle    = document.getElementById('nr-toggle');
-    const knob      = document.getElementById('nr-toggle-knob');
-    const slider    = document.getElementById('nr-intensity');
-    const label     = document.getElementById('nr-intensity-label');
-    const section   = document.getElementById('nr-intensity-section');
+    const toggle         = document.getElementById('nr-toggle');
+    const knob           = document.getElementById('nr-toggle-knob');
+    const slider         = document.getElementById('nr-intensity');
+    const label          = document.getElementById('nr-intensity-label');
+    const intensitySection = document.getElementById('nr-intensity-section');
+    const engineSection  = document.getElementById('nr-engine-section');
+    const btnRNNoise     = document.getElementById('nr-engine-rnnoise');
+    const btnGate        = document.getElementById('nr-engine-gate');
+    const badge          = document.getElementById('nr-engine-badge');
     if (!toggle) return;
 
     const LABELS = { 1: 'Léger', 2: 'Modéré', 3: 'Agressif' };
 
     let enabled   = NoiseReducer.isEnabled();
     let intensity = NoiseReducer.getIntensity();
+    let engine    = localStorage.getItem('onkoz_nr_engine') || 'rnnoise';
 
     function updateToggleUI() {
       if (enabled) {
         toggle.classList.add('bg-onkoz-accent');
         toggle.classList.remove('bg-onkoz-border');
         knob.style.transform = 'translateX(20px)';
-        section.classList.remove('opacity-40', 'pointer-events-none');
+        engineSection?.classList.remove('opacity-40', 'pointer-events-none');
       } else {
         toggle.classList.remove('bg-onkoz-accent');
         toggle.classList.add('bg-onkoz-border');
         knob.style.transform = 'translateX(0)';
-        section.classList.add('opacity-40', 'pointer-events-none');
+        engineSection?.classList.add('opacity-40', 'pointer-events-none');
+      }
+    }
+
+    function updateEngineUI() {
+      const isRNN = engine === 'rnnoise';
+      // Bouton RNNoise
+      if (btnRNNoise) {
+        btnRNNoise.className = `flex flex-col items-center gap-0.5 px-2 py-2 rounded-md border text-xs font-semibold transition-colors ${isRNN ? 'border-onkoz-accent bg-onkoz-accent/20 text-onkoz-accent' : 'border-onkoz-border text-onkoz-text-muted hover:bg-onkoz-hover'}`;
+      }
+      // Bouton Gate
+      if (btnGate) {
+        btnGate.className = `flex flex-col items-center gap-0.5 px-2 py-2 rounded-md border text-xs font-semibold transition-colors ${!isRNN ? 'border-onkoz-accent bg-onkoz-accent/20 text-onkoz-accent' : 'border-onkoz-border text-onkoz-text-muted hover:bg-onkoz-hover'}`;
+      }
+      // Badge moteur actif
+      if (badge) {
+        badge.textContent = isRNN ? '🤖 RNNoise IA' : '⚙️ Noise gate';
+        badge.classList.toggle('hidden', !enabled);
+      }
+      // Slider intensité uniquement en mode gate
+      if (intensitySection) {
+        intensitySection.classList.toggle('hidden', isRNN);
       }
     }
 
     function updateSliderUI() {
-      slider.value     = intensity;
-      label.textContent = LABELS[intensity] || '';
+      if (slider) slider.value = intensity;
+      if (label) label.textContent = LABELS[intensity] || '';
     }
 
     // Init
     updateToggleUI();
+    updateEngineUI();
     updateSliderUI();
 
-    // Toggle clic
+    // Toggle activé/désactivé
     toggle.addEventListener('click', () => {
       enabled = !enabled;
       localStorage.setItem('onkoz_nr_enabled', enabled ? 'true' : 'false');
       updateToggleUI();
+      updateEngineUI();
     });
 
-    // Slider change
-    slider.addEventListener('input', () => {
+    // Sélection moteur
+    btnRNNoise?.addEventListener('click', () => {
+      engine = 'rnnoise';
+      localStorage.setItem('onkoz_nr_engine', 'rnnoise');
+      updateEngineUI();
+    });
+    btnGate?.addEventListener('click', () => {
+      engine = 'gate';
+      localStorage.setItem('onkoz_nr_engine', 'gate');
+      updateEngineUI();
+    });
+
+    // Slider intensité (noise gate)
+    slider?.addEventListener('input', () => {
       intensity = parseInt(slider.value);
       localStorage.setItem('onkoz_nr_intensity', intensity);
       updateSliderUI();
