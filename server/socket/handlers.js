@@ -32,14 +32,24 @@ function setupSocketHandlers(io) {
     db.prepare('UPDATE users SET last_seen = ? WHERE id = ?').run(Date.now(), userId);
 
     socket.broadcast.emit('user:online', { userId, username });
+    socket.emit('online:list', [...onlineUsers.keys()]);
+
+    // Envoyer l'état actuel des salons vocaux occupés au nouvel arrivant
+    for (const [chId, membersSet] of voiceMembers.entries()) {
+      if (membersSet.size > 0) {
+        socket.emit('voice:members', { channelId: chId, members: [...membersSet] });
+      }
+    }
 
     // ── CHAT TEXTUEL ────────────────────────────────────────────────────────────
 
-    socket.on('chat:join', ({ channelId }) => {
+    socket.on('chat:join', (data) => {
+      const channelId = typeof data === 'object' ? data.channelId : data;
       socket.join(`ch:${channelId}`);
     });
 
-    socket.on('chat:leave', ({ channelId }) => {
+    socket.on('chat:leave', (data) => {
+      const channelId = typeof data === 'object' ? data.channelId : data;
       socket.leave(`ch:${channelId}`);
     });
 
