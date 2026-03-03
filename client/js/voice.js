@@ -1,4 +1,6 @@
-/* ── Voice Module ────────────────────────────────────────────────────────── */
+/* ── Voice Module ────────────────────────────────────────────────────────────
+   Gestion complète : audio WebRTC (mediasoup) + partage d'écran
+   ──────────────────────────────────────────────────────────────────────────── */
 const Voice = (() => {
   let device = null, sendTransport = null, recvTransport = null;
   let producer = null, consumers = new Map(), localStream = null;
@@ -7,26 +9,12 @@ const Voice = (() => {
   let pendingPeers = [];
 
   // ── Partage d'écran ────────────────────────────────────────────────────────
-  let screenProducer  = null;
-  let screenStream    = null;
+  let screenProducer  = null;   // producer vidéo local (partageur)
+  let screenStream    = null;   // stream getDisplayMedia
   let isSharing       = false;
-  let screenConsumers = new Map(); // peerId → consumer
+  let screenConsumers = new Map(); // peerId → consumer vidéo distant
 
-  function init(s) {
-    socket = s;
-
-    socket.on('ms:existingProducers', (producers) => {
-      if (!recvTransport || !device) {
-        producers.forEach(p => pendingPeers.push(p));
-        return;
-      }
-      producers.forEach(p => handleNewProducer(p));
-    });
-
-    socket.on('screen:started', ({ username }) => {
-      AudioSettings.showToast('\u{1F5A5}\uFE0F ' + username + ' partage son ecran');
-    });
-  }
+  function init(s) { socket = s; }
 
   // ── Rejoindre un salon vocal ───────────────────────────────────────────────
   async function joinRoom(channelId, type, roomId, channelName) {
@@ -36,16 +24,11 @@ const Voice = (() => {
     renderVoiceRoom(channelName);
 
     try {
-      const micId = AudioSettings.getMicId();
-      const rawStream = await navigator.mediaDevices.getUserMedia({
-        audio: micId && micId !== 'default'
-          ? { deviceId: { ideal: micId }, echoCancellation: true, noiseSuppression: true }
-          : { echoCancellation: true, noiseSuppression: true },
+      const micId = (typeof AudioSettings !== 'undefined') ? AudioSettings.getMicId() : null;
+      localStream = await navigator.mediaDevices.getUserMedia({
+        audio: micId && micId !== 'default' ? { deviceId: { ideal: micId } } : true,
         video: false,
       });
-
-      // Appliquer la chaîne de réduction de bruit
-      localStream = await NoiseReducer.process(rawStream);
       device = new mediasoupClient.Device();
 
       const { caps } = await socketEmit('ms:getRouterCapabilities', { roomId });
@@ -77,9 +60,9 @@ const Voice = (() => {
         catch (e) { eb(e); }
       });
 
-      // Consommer les pairs en attente
+      // Consommer les pairs déjà présents
       if (pendingPeers.length > 0) {
-        pendingPeers.forEach(p => { addPeerToUI(p.peerId, p.username); handleNewProducer(p); });
+        onExistingPeers(pendingPeers);
         pendingPeers = [];
       }
 
@@ -89,83 +72,112 @@ const Voice = (() => {
       return;
     }
 
-    socket.off('ms:newProducer', handleNewProducer); // évite les doublons si rejoin
     socket.on('ms:newProducer', handleNewProducer);
+
+    // Écouter les notifications de partage d'écran distant
+    socket.on('screen:sharing', ({ peerId, username: peerName, sharing }) => {
+      if (!sharing) hideScreenOverlay(peerId);
+    });
+    socket.on('screen:stopped', ({ peerId }) => {
+      hideScreenOverlay(peerId);
+    });
+
+    const vc = document.getElementById('voice-controls');
+    if (vc) { vc.classList.remove('hidden'); vc.classList.add('flex'); }
     updateMuteBtn();
   }
 
   // ── Consommer un producer distant ─────────────────────────────────────────
-  async function handleNewProducer({ peerId, username, producerId, appData }) {
+  // ✅ FIX BUG 3 : utiliser producerId (reçu dans ms:newProducer)
+  async function handleNewProducer({ peerId, username: peerName, producerId, appData }) {
     if (!recvTransport || !device) return;
     try {
       const data = await socketEmit('ms:consume', {
-        roomId: currentRoomId, producerPeerId: peerId,
-        transportId: recvTransport.id, rtpCapabilities: device.rtpCapabilities,
-        producerId, // passer le producerId exact pour multi-producer
+        roomId: currentRoomId,
+        producerId,           // ✅ plus producerPeerId
+        transportId: recvTransport.id,
+        rtpCapabilities: device.rtpCapabilities,
       });
       const consumer = await recvTransport.consume(data);
-      const isScreen = appData?.screenShare || data.appData?.screenShare || consumer.track.kind === 'video';
 
-      if (isScreen) {
-        // ── Flux vidéo = partage d'écran ──
+      if (consumer.track.kind === 'video' || data.appData?.screenShare) {
+        // ── Partage d'écran distant ──
         screenConsumers.set(peerId, consumer);
-        showScreenOverlay(consumer.track, peerId, username || peerId);
+        showScreenOverlay(consumer.track, peerId, peerName);
       } else {
-        // ── Flux audio normal ──
+        // ── Audio normal ──
         consumers.set(peerId, consumer);
         const audio = new Audio();
         audio.srcObject = new MediaStream([consumer.track]);
         const vol = parseInt(localStorage.getItem('onkoz_volume') || '100') / 100;
         audio.volume = vol;
         audio.play().catch(console.warn);
-        addPeerToUI(peerId, username);
+        addPeerToUI(peerId, peerName);
       }
-    } catch (err) { console.error('[Voice] consume:', err); }
+    } catch (err) {
+      console.error('[Voice] consume error:', err);
+    }
   }
 
   // ── Quitter le salon ───────────────────────────────────────────────────────
   async function leaveRoom() {
     if (!currentRoomId) return;
+
     if (isSharing) await stopScreenShare(false);
-    NoiseReducer.dispose();
 
     currentType === 'permanent'
       ? socket.emit('voice:leave',    { channelId: currentChannelId })
       : socket.emit('ephemeral:leave', { eid: currentChannelId });
 
     socket.off('ms:newProducer', handleNewProducer);
-    producer?.close(); sendTransport?.close(); recvTransport?.close();
+    socket.off('screen:sharing');
+    socket.off('screen:stopped');
+
+    producer?.close();
+    for (const c of consumers.values()) c.close();
+    for (const c of screenConsumers.values()) c.close();
+    consumers.clear();
+    screenConsumers.clear();
+
     localStream?.getTracks().forEach(t => t.stop());
-    consumers.forEach(c => c.close());
-    screenConsumers.forEach(c => c.close());
-    consumers.clear(); screenConsumers.clear();
-    producer = recvTransport = sendTransport = localStream = device = null;
-    currentRoomId = currentChannelId = currentType = null;
-    isMuted = false; pendingPeers = [];
+    sendTransport?.close(); recvTransport?.close();
+    device = null; sendTransport = null; recvTransport = null;
+    producer = null; localStream = null;
 
-    hideAllScreenOverlays();
+    currentRoomId = null; currentChannelId = null; currentType = null;
+    pendingPeers  = [];
 
-    document.getElementById('content-area').innerHTML = `
-      <div class="flex flex-col items-center justify-center flex-1 gap-3 text-onkoz-text-muted">
-        <div class="text-6xl">🎤</div>
-        <h2 class="text-onkoz-text-md text-xl font-semibold">Bienvenue sur ONKOZ</h2>
-        <p class="text-sm">Sélectionne un salon pour commencer</p>
-      </div>`;
-    document.getElementById('message-input-area').style.display = 'none';
-    document.getElementById('channel-name').textContent = 'Sélectionne un salon';
+    // Nettoyer overlays
+    document.getElementById('screen-local-preview')?.remove();
+    document.querySelectorAll('.screen-overlay-remote').forEach(el => el.remove());
+
+    renderVoiceRoom(null);
+    const vc = document.getElementById('voice-controls');
+    if (vc) { vc.classList.add('hidden'); vc.classList.remove('flex'); }
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  //  PARTAGE D'ÉCRAN
-  // ═══════════════════════════════════════════════════════════════════════════
+  // ── Mute / Unmute ──────────────────────────────────────────────────────────
+  function toggleMute() {
+    if (!producer) return;
+    isMuted = !isMuted;
+    isMuted ? producer.pause() : producer.resume();
+    localStream?.getAudioTracks().forEach(t => { t.enabled = !isMuted; });
+    updateMuteBtn();
+  }
 
+  function updateMuteBtn() {
+    const btn = document.getElementById('voice-bar-mute');
+    if (btn) btn.textContent = isMuted ? '🔇' : '🎤';
+  }
+
+  // ── Partage d'écran local ──────────────────────────────────────────────────
   async function toggleScreenShare() {
     isSharing ? await stopScreenShare(true) : await startScreenShare();
   }
 
   async function startScreenShare() {
     if (!currentRoomId || !sendTransport) {
-      AudioSettings.showToast('⚠️ Rejoins d\'abord un salon vocal');
+      if (typeof AudioSettings !== 'undefined') AudioSettings.showToast('⚠️ Rejoins d\'abord un salon vocal');
       return;
     }
     try {
@@ -187,12 +199,15 @@ const Voice = (() => {
       updateShareBtn(true);
       showLocalPreview(screenStream);
 
+      // Notifier les autres via le serveur
+      socket.emit('screen:sharing', { roomId: currentRoomId, sharing: true });
+
       // Arrêt via bouton natif navigateur
       videoTrack.addEventListener('ended', () => stopScreenShare(true));
 
     } catch (err) {
       if (err.name !== 'NotAllowedError') {
-        AudioSettings.showToast(`❌ Partage impossible : ${err.message}`);
+        if (typeof AudioSettings !== 'undefined') AudioSettings.showToast(`❌ Partage impossible : ${err.message}`);
       }
     }
   }
@@ -206,8 +221,17 @@ const Voice = (() => {
     updateShareBtn(false);
     hideLocalPreview();
     if (notify && socket && currentRoomId) {
-      socket.emit('screen:stop', { roomId: currentRoomId });
+      socket.emit('screen:sharing', { roomId: currentRoomId, sharing: false });
     }
+  }
+
+  function updateShareBtn(active) {
+    const btn = document.getElementById('voice-bar-screenshare');
+    if (!btn) return;
+    btn.textContent = active ? '🛑' : '🖥️';
+    btn.title = active ? 'Arrêter le partage' : 'Partager l\'écran';
+    if (active) btn.classList.add('text-onkoz-accent');
+    else btn.classList.remove('text-onkoz-accent');
   }
 
   // ── Aperçu local (partageur) ───────────────────────────────────────────────
@@ -217,48 +241,22 @@ const Voice = (() => {
     overlay.id = 'screen-local-preview';
     overlay.className = 'fixed inset-0 z-[200] bg-black/85 flex flex-col items-center justify-center gap-4';
 
-    // Badge "En direct"
     const badge = document.createElement('div');
     badge.className = 'flex items-center gap-2 bg-onkoz-surface border border-onkoz-border rounded-full px-4 py-2 text-sm font-semibold text-onkoz-text';
-    badge.innerHTML = `<span class="w-2 h-2 rounded-full bg-onkoz-danger animate-pulse shrink-0"></span> Vous partagez votre écran`;
+    badge.innerHTML = '<span class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span> Partage en cours';
 
-    // Vidéo
     const video = document.createElement('video');
-    video.className = 'max-w-5xl max-h-[65vh] rounded-xl border border-onkoz-border shadow-dm object-contain';
     video.srcObject = stream;
-    video.autoplay  = true;
-    video.muted     = true;
-
-    // Boutons
-    const btns = document.createElement('div');
-    btns.className = 'flex items-center gap-3';
+    video.autoplay = true;
+    video.muted    = true;
+    video.className = 'max-w-[80vw] max-h-[70vh] rounded-xl border-2 border-onkoz-accent shadow-2xl';
 
     const stopBtn = document.createElement('button');
-    stopBtn.className = 'flex items-center gap-2 px-5 py-2.5 bg-onkoz-danger hover:bg-red-700 text-white font-semibold rounded-lg transition-colors';
-    stopBtn.innerHTML = '⏹ Arrêter le partage';
-    stopBtn.addEventListener('click', () => stopScreenShare(true));
+    stopBtn.textContent = '⏹ Arrêter le partage';
+    stopBtn.className   = 'px-6 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg font-semibold transition-colors';
+    stopBtn.onclick     = () => stopScreenShare(true);
 
-    const minimizeBtn = document.createElement('button');
-    minimizeBtn.className = 'flex items-center gap-2 px-4 py-2.5 bg-onkoz-surface border border-onkoz-border hover:bg-onkoz-hover text-onkoz-text font-medium rounded-lg transition-colors text-sm';
-    minimizeBtn.innerHTML = '⬇ Réduire';
-    let minimized = false;
-    minimizeBtn.addEventListener('click', () => {
-      minimized = !minimized;
-      if (minimized) {
-        overlay.className = 'fixed bottom-20 right-4 z-[200] flex flex-col items-end gap-2';
-        video.className   = 'w-56 h-32 rounded-lg border border-onkoz-border shadow-dm object-contain';
-        badge.classList.add('hidden');
-        minimizeBtn.innerHTML = '⬆ Agrandir';
-      } else {
-        overlay.className = 'fixed inset-0 z-[200] bg-black/85 flex flex-col items-center justify-center gap-4';
-        video.className   = 'max-w-5xl max-h-[65vh] rounded-xl border border-onkoz-border shadow-dm object-contain';
-        badge.classList.remove('hidden');
-        minimizeBtn.innerHTML = '⬇ Réduire';
-      }
-    });
-
-    btns.append(stopBtn, minimizeBtn);
-    overlay.append(badge, video, btns);
+    overlay.append(badge, video, stopBtn);
     document.body.appendChild(overlay);
   }
 
@@ -266,288 +264,120 @@ const Voice = (() => {
     document.getElementById('screen-local-preview')?.remove();
   }
 
-  // ── Overlay spectateur ─────────────────────────────────────────────────────
-  function showScreenOverlay(track, peerId, username) {
-    document.getElementById(`screen-overlay-${peerId}`)?.remove();
-
+  // ── Overlay distant (spectateur) ───────────────────────────────────────────
+  function showScreenOverlay(track, peerId, peerName) {
+    hideScreenOverlay(peerId);
     const overlay = document.createElement('div');
     overlay.id = `screen-overlay-${peerId}`;
-    overlay.className = 'fixed inset-0 z-[200] bg-black/90 flex flex-col items-center justify-center gap-4';
+    overlay.className = 'screen-overlay-remote fixed inset-0 z-[190] bg-black/90 flex flex-col items-center justify-center gap-3';
 
-    // Badge
-    const badge = document.createElement('div');
-    badge.className = 'flex items-center gap-2 bg-onkoz-surface border border-onkoz-border rounded-full px-4 py-2 text-sm font-semibold text-onkoz-text';
-    badge.innerHTML = `<span class="w-2 h-2 rounded-full bg-onkoz-success animate-pulse shrink-0"></span> <strong>${username}</strong>&nbsp;partage son écran`;
+    const label = document.createElement('div');
+    label.className = 'text-onkoz-text-muted text-sm font-medium';
+    label.textContent = `🖥️ ${peerName} partage son écran`;
 
-    // Vidéo
     const video = document.createElement('video');
-    video.className = 'max-w-5xl max-h-[70vh] rounded-xl border border-onkoz-border shadow-dm object-contain';
     video.srcObject = new MediaStream([track]);
     video.autoplay  = true;
-    video.muted     = false;
-    video.controls  = false;
-
-    // Boutons
-    const btns = document.createElement('div');
-    btns.className = 'flex items-center gap-3';
+    video.muted     = true;
+    video.className = 'max-w-[90vw] max-h-[80vh] rounded-xl border border-onkoz-border shadow-2xl';
 
     const closeBtn = document.createElement('button');
-    closeBtn.className = 'flex items-center gap-2 px-5 py-2.5 bg-onkoz-surface border border-onkoz-border hover:bg-onkoz-hover text-onkoz-text font-semibold rounded-lg transition-colors';
-    closeBtn.innerHTML = '✕ Fermer l\'aperçu';
-    closeBtn.addEventListener('click', () => overlay.remove());
+    closeBtn.textContent = '✕ Fermer';
+    closeBtn.className   = 'px-4 py-1.5 bg-onkoz-surface border border-onkoz-border text-onkoz-text-muted hover:text-onkoz-text rounded-lg text-sm transition-colors';
+    closeBtn.onclick     = () => hideScreenOverlay(peerId);
 
-    const minimizeBtn = document.createElement('button');
-    minimizeBtn.className = 'flex items-center gap-2 px-4 py-2.5 bg-onkoz-surface border border-onkoz-border hover:bg-onkoz-hover text-onkoz-text font-medium rounded-lg transition-colors text-sm';
-    minimizeBtn.innerHTML = '⬇ Réduire';
-    let minimized = false;
-    minimizeBtn.addEventListener('click', () => {
-      minimized = !minimized;
-      if (minimized) {
-        overlay.className = 'fixed bottom-20 right-4 z-[200] flex flex-col items-end gap-2';
-        video.className   = 'w-56 h-32 rounded-lg border border-onkoz-border shadow-dm object-contain';
-        badge.classList.add('hidden');
-        minimizeBtn.innerHTML = '⬆ Agrandir';
-      } else {
-        overlay.className = 'fixed inset-0 z-[200] bg-black/90 flex flex-col items-center justify-center gap-4';
-        video.className   = 'max-w-5xl max-h-[70vh] rounded-xl border border-onkoz-border shadow-dm object-contain';
-        badge.classList.remove('hidden');
-        minimizeBtn.innerHTML = '⬇ Réduire';
-      }
-    });
-
-    btns.append(closeBtn, minimizeBtn);
-    overlay.append(badge, video, btns);
+    overlay.append(label, video, closeBtn);
     document.body.appendChild(overlay);
   }
 
-  function hideAllScreenOverlays() {
-    document.querySelectorAll('[id^="screen-overlay-"]').forEach(el => el.remove());
-    hideLocalPreview();
-    screenConsumers.forEach(c => c.close());
-    screenConsumers.clear();
+  function hideScreenOverlay(peerId) {
+    document.getElementById(`screen-overlay-${peerId}`)?.remove();
+    const consumer = screenConsumers.get(peerId);
+    if (consumer) { try { consumer.close(); } catch {} screenConsumers.delete(peerId); }
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  //  HELPERS
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  function toggleMute() {
-    isMuted = !isMuted;
-    localStream?.getAudioTracks().forEach(t => { t.enabled = !isMuted; });
-    updateMuteBtn();
-  }
-
-  function updateMuteBtn() {
-    const icon = document.getElementById('voice-panel-mute-icon');
-    const btn  = document.getElementById('voice-panel-mute');
-    if (!icon || !btn) return;
-    if (isMuted) {
-      icon.textContent = '🔇';
-      btn.title = 'Activer le micro';
-      btn.classList.add('text-onkoz-danger', 'bg-onkoz-danger/15');
-      btn.classList.remove('text-onkoz-text-muted');
+  // ── UI helpers ─────────────────────────────────────────────────────────────
+  function renderVoiceRoom(channelName) {
+    const bar = document.getElementById('voice-bar');
+    const nameEl = document.getElementById('voice-bar-channel');
+    if (!bar) return;
+    if (channelName) {
+      if (nameEl) nameEl.textContent = channelName;
+      bar.classList.remove('hidden');
     } else {
-      icon.textContent = '🎤';
-      btn.title = 'Couper le micro';
-      btn.classList.remove('text-onkoz-danger', 'bg-onkoz-danger/15');
-      btn.classList.add('text-onkoz-text-muted');
+      bar.classList.add('hidden');
     }
   }
 
-  function updateShareBtn(sharing) {
-    const icon = document.getElementById('voice-panel-screen-icon');
-    const btn  = document.getElementById('voice-panel-screenshare');
-    if (!icon || !btn) return;
-    if (sharing) {
-      icon.textContent = '⏹';
-      btn.title = 'Arrêter le partage';
-      btn.classList.add('text-onkoz-danger');
-      btn.classList.remove('text-onkoz-text-muted');
-    } else {
-      icon.textContent = '🖥️';
-      btn.title = 'Partager l\'écran';
-      btn.classList.remove('text-onkoz-danger');
-      btn.classList.add('text-onkoz-text-muted');
-    }
-  }
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  //  ANNONCES VOCALES (style TeamSpeak)
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  const KEY_ANNOUNCE = 'onkoz_voice_announce'; // 'true' | 'false'
-
-  function isAnnounceEnabled() {
-    return localStorage.getItem(KEY_ANNOUNCE) !== 'false';
-  }
-
-  // File d'attente pour éviter les chevauchements
-  const announceQueue = [];
-  let   isAnnouncing  = false;
-
-  function announce(username, action) {
-    if (!isAnnounceEnabled()) return;
-    announceQueue.push({ username, action });
-    if (!isAnnouncing) processAnnounceQueue();
-  }
-
-  function processAnnounceQueue() {
-    if (announceQueue.length === 0) { isAnnouncing = false; return; }
-    isAnnouncing = true;
-    const { username, action } = announceQueue.shift();
-
-    // 1. Son d'entrée/sortie via Web Audio API
-    playJoinSound(action === 'join');
-
-    // 2. Synthèse vocale après le son (délai 350ms)
-    setTimeout(() => {
-      const msg  = action === 'join'
-        ? `${username} a rejoint le canal`
-        : `${username} a quitté le canal`;
-
-      if (!window.speechSynthesis) { processAnnounceQueue(); return; }
-
-      // Annuler toute synthèse en cours
-      window.speechSynthesis.cancel();
-
-      const utt  = new SpeechSynthesisUtterance(msg);
-      utt.lang   = 'fr-FR';
-      utt.volume = parseFloat(localStorage.getItem('onkoz_announce_volume') || '0.8');
-      utt.rate   = 1.05;
-      utt.pitch  = 1.0;
-
-      // Choisir une voix française si disponible
-      const voices = window.speechSynthesis.getVoices();
-      const frVoice = voices.find(v => v.lang.startsWith('fr')) || null;
-      if (frVoice) utt.voice = frVoice;
-
-      utt.onend   = () => setTimeout(processAnnounceQueue, 200);
-      utt.onerror = () => setTimeout(processAnnounceQueue, 200);
-
-      window.speechSynthesis.speak(utt);
-    }, 350);
-  }
-
-  // Son court généré via Web Audio (pas de fichier externe nécessaire)
-  function playJoinSound(isJoin) {
-    try {
-      const ctx  = new (window.AudioContext || window.webkitAudioContext)();
-      const vol  = parseFloat(localStorage.getItem('onkoz_announce_volume') || '0.8') * 0.4;
-      const gain = ctx.createGain();
-      gain.gain.value = vol;
-      gain.connect(ctx.destination);
-
-      if (isJoin) {
-        // Deux notes montantes (do → mi)
-        playNote(ctx, gain, 523.25, 0,    0.12); // Do5
-        playNote(ctx, gain, 659.25, 0.13, 0.12); // Mi5
-      } else {
-        // Deux notes descendantes (mi → do)
-        playNote(ctx, gain, 659.25, 0,    0.12); // Mi5
-        playNote(ctx, gain, 523.25, 0.13, 0.12); // Do5
-      }
-
-      // Fermer le contexte après la lecture
-      setTimeout(() => ctx.close(), 800);
-    } catch (e) { /* silencieux si AudioContext indisponible */ }
-  }
-
-  function playNote(ctx, dest, freq, startOffset, duration) {
-    const osc  = ctx.createOscillator();
-    const env  = ctx.createGain();
-    const now  = ctx.currentTime + startOffset;
-
-    osc.type            = 'sine';
-    osc.frequency.value = freq;
-
-    // Enveloppe ADSR douce
-    env.gain.setValueAtTime(0,   now);
-    env.gain.linearRampToValueAtTime(1, now + 0.01);
-    env.gain.linearRampToValueAtTime(0, now + duration);
-
-    osc.connect(env);
-    env.connect(dest);
-    osc.start(now);
-    osc.stop(now + duration + 0.05);
-  }
-
-  // ── Gestion des voix (chargement asynchrone) ───────────────────────────────
-  if (window.speechSynthesis) {
-    window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
-    window.speechSynthesis.getVoices(); // déclencher le chargement
-  }
-
-  function addPeerToUI(peerId, username) {
-    if (document.getElementById(`vp-${peerId}`)) return;
-    const container = document.getElementById('voice-peers-container');
-    if (!container) return;
-    const peer = document.createElement('div');
-    peer.id = `vp-${peerId}`;
-    peer.className = 'voice-peer flex flex-col items-center gap-2 px-4 py-3 bg-onkoz-surface rounded-xl min-w-[80px] transition-all';
-    peer.innerHTML = `
-      <div class="${UI.avatarClass(username)} w-12 h-12 rounded-full flex items-center justify-center text-xl font-bold text-white uppercase">${username[0]}</div>
-      <span class="text-[0.8rem] text-onkoz-text-md text-center">${username}</span>`;
-    container.appendChild(peer);
+  function addPeerToUI(peerId, peerName) {
+    const container = document.getElementById('voice-peers');
+    if (!container || container.querySelector(`[data-peer="${peerId}"]`)) return;
+    const el = document.createElement('div');
+    el.dataset.peer = peerId;
+    el.className = 'flex items-center gap-2 text-sm text-onkoz-text-muted';
+    el.innerHTML = `<span class="w-2 h-2 rounded-full bg-green-400"></span>${peerName}`;
+    container.appendChild(el);
   }
 
   function removePeerFromUI(peerId) {
-    document.getElementById(`vp-${peerId}`)?.remove();
-    consumers.get(peerId)?.close();
-    consumers.delete(peerId);
-    // Fermer l'overlay si ce pair partageait
-    document.getElementById(`screen-overlay-${peerId}`)?.remove();
-    screenConsumers.get(peerId)?.close();
-    screenConsumers.delete(peerId);
-  }
-
-  function renderVoiceRoom(channelName) {
-    const user = Auth.getUser();
-    document.getElementById('content-area').innerHTML = `
-      <div class="flex flex-col items-center justify-center flex-1 gap-6">
-        <h3 class="text-xl font-semibold text-onkoz-text-md">🎤 ${channelName}</h3>
-        <div id="voice-peers-container" class="flex flex-wrap gap-4 justify-center">
-          <div class="voice-peer flex flex-col items-center gap-2 px-4 py-3 bg-onkoz-surface rounded-xl min-w-[80px]">
-            <div class="${UI.avatarClass(user.username)} w-12 h-12 rounded-full flex items-center justify-center text-xl font-bold text-white uppercase">${user.username[0]}</div>
-            <span class="text-[0.8rem] text-onkoz-text-md text-center">${user.username} <span class="text-onkoz-text-muted">(moi)</span></span>
-          </div>
-        </div>
-      </div>`;
+    document.querySelector(`[data-peer="${peerId}"]`)?.remove();
+    hideScreenOverlay(peerId);
   }
 
   function showVoiceError(msg) {
-    document.getElementById('content-area').innerHTML = `
-      <div class="flex flex-col items-center justify-center flex-1 gap-3 text-onkoz-text-muted">
-        <div class="text-5xl">⚠️</div>
-        <h2 class="text-onkoz-text-md text-xl font-semibold">Erreur microphone</h2>
-        <p class="text-sm text-center max-w-xs">${msg}<br>Vérifiez les permissions microphone dans votre navigateur.</p>
-      </div>`;
+    if (typeof AudioSettings !== 'undefined') AudioSettings.showToast(`❌ ${msg}`);
+    else console.error('[Voice]', msg);
   }
 
+  // ── Socket helpers ─────────────────────────────────────────────────────────
   function socketEmit(event, data) {
     return new Promise((resolve, reject) => {
-      socket.emit(event, data, res => res?.error ? reject(new Error(res.error)) : resolve(res));
+      socket.emit(event, data, (res) => {
+        if (!res) return reject(new Error('Pas de réponse'));
+        res.error ? reject(new Error(res.error)) : resolve(res);
+      });
     });
   }
 
-  function onPeerJoined({ peerId, username }) {
-    addPeerToUI(peerId, username);
-    announce(username, 'join');
+  function onPeerJoined({ peerId, username: peerName }) {
+    addPeerToUI(peerId, peerName);
   }
-  function onPeerLeft({ peerId, username }) {
-    // Récupérer le username depuis le DOM si pas fourni
-    const el   = document.getElementById(`vp-${peerId}`);
-    const name = username || el?.querySelector('span')?.textContent?.trim() || 'Utilisateur';
+
+  function onPeerLeft({ peerId }) {
     removePeerFromUI(peerId);
-    announce(name, 'leave');
   }
+
+  // ✅ FIX BUG 5 : consommer tous les producers de chaque peer existant
   function onExistingPeers(peers) {
     if (!recvTransport) { pendingPeers = peers; return; }
-    peers.forEach(p => { addPeerToUI(p.peerId, p.username); handleNewProducer(p); });
+    peers.forEach(p => {
+      addPeerToUI(p.peerId, p.username);
+      if (p.producers && p.producers.length > 0) {
+        // Consommer chaque producer du peer (audio + éventuel screen share)
+        p.producers.forEach(prod => {
+          handleNewProducer({
+            peerId:   p.peerId,
+            username: p.username,
+            producerId: prod.producerId,
+            appData:    prod.appData,
+          });
+        });
+      } else {
+        // Fallback ancien format (rétro-compat)
+        handleNewProducer(p);
+      }
+    });
   }
 
   return {
-    init, joinRoom, leaveRoom, toggleMute, toggleScreenShare,
-    onPeerJoined, onPeerLeft, onExistingPeers,
+    init,
+    joinRoom,
+    leaveRoom,
+    toggleMute,
+    toggleScreenShare,
+    onPeerJoined,
+    onPeerLeft,
+    onExistingPeers,
     getCurrentRoomId: () => currentRoomId,
   };
 })();
