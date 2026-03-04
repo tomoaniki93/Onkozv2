@@ -187,8 +187,9 @@ const Voice = (() => {
       ? socket.emit('voice:leave',     { channelId: currentChannelId })
       : socket.emit('ephemeral:leave', { eid: currentChannelId });
 
-    // Détacher le listener
+    // Détacher les listeners
     socket.off('ms:newProducer', handleNewProducer);
+    socket.off('ms:existingProducers');
 
     // Fermer les transports mediasoup
     producer?.close();
@@ -506,14 +507,8 @@ const Voice = (() => {
   }
 
   function onExistingPeers(peers) {
-    if (!recvTransport) {
-      pendingPeers = peers;
-      return;
-    }
-    peers.forEach(p => {
-      addPeerToUI(p.peerId, p.username);
-      handleNewProducer(p);
-    });
+    // UI seulement — les producers arrivent via ms:existingProducers
+    peers.forEach(p => addPeerToUI(p.peerId, p.username));
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
