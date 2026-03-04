@@ -2,36 +2,42 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ── Base ────────────────────────────────────────────────────────────────── */
+/* ════════════════════════════════════════════════════════════
+   BASE
+════════════════════════════════════════════════════════════ */
 @layer base {
   * { box-sizing: border-box; }
 
   body {
-    @apply bg-onkoz-bg text-onkoz-text font-sans overflow-hidden h-screen;
+    @apply bg-onkoz-bg text-onkoz-text font-sans overflow-hidden;
+    height: 100dvh;
   }
 
-  ::-webkit-scrollbar        { width: 6px; }
-  ::-webkit-scrollbar-track  { background: transparent; }
-  ::-webkit-scrollbar-thumb  { @apply bg-onkoz-border rounded; }
+  ::-webkit-scrollbar       { width: 3px; height: 3px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #302D45; border-radius: 2px; }
+  ::-webkit-scrollbar-thumb:hover { background: #5A5474; }
 
   input, button { font: inherit; }
   ul { list-style: none; padding: 0; margin: 0; }
 }
 
-/* ── Components réutilisables ─────────────────────────────────────────────── */
+/* ════════════════════════════════════════════════════════════
+   COMPOSANTS
+════════════════════════════════════════════════════════════ */
 @layer components {
 
-  /* Couleurs avatar (générées dynamiquement en JS) */
-  .av-0 { background-color: #7c5cbf; }
-  .av-1 { background-color: #3ba55c; }
-  .av-2 { background-color: #ed4245; }
-  .av-3 { background-color: #faa61a; }
-  .av-4 { background-color: #5865f2; }
-  .av-5 { background-color: #eb459e; }
-  .av-6 { background-color: #00b0f4; }
-  .av-7 { background-color: #57f287; }
+  /* ── Avatar couleurs ── */
+  .av-0 { background: linear-gradient(135deg,#7B5CE5,#4A2FA0); }
+  .av-1 { background: linear-gradient(135deg,#2A9D5C,#1A5E38); }
+  .av-2 { background: linear-gradient(135deg,#FF5252,#8B1A10); }
+  .av-3 { background: linear-gradient(135deg,#F5A623,#92400E); }
+  .av-4 { background: linear-gradient(135deg,#5865F2,#2D3580); }
+  .av-5 { background: linear-gradient(135deg,#EB459E,#8B1A5E); }
+  .av-6 { background: linear-gradient(135deg,#0891B2,#0E4F66); }
+  .av-7 { background: linear-gradient(135deg,#4FD17A,#1A5E38); }
 
-  /* Badges de rôle */
+  /* ── Badges de rôle ── */
   .role-badge {
     @apply text-2xs font-bold px-1.5 py-px rounded uppercase tracking-wider;
   }
@@ -39,23 +45,259 @@
   .role-badge.moderator { @apply text-onkoz-mod       bg-onkoz-mod/15;   }
   .role-badge.user      { @apply text-onkoz-user      bg-onkoz-user/15;  }
 
-  /* Auteur de message */
+  /* ── Auteur de message ── */
   .msg-author.admin     { @apply text-onkoz-admin; }
   .msg-author.moderator { @apply text-onkoz-mod; }
   .msg-author.user      { @apply text-onkoz-text; }
 
-  /* Peer vocal (bordure speaking) */
+  /* ── Peer vocal ── */
   .voice-peer { @apply border-2 border-onkoz-border; }
-  .voice-peer.speaking {
-    @apply border-onkoz-success animate-speaking;
+  .voice-peer.speaking { @apply border-onkoz-success animate-speaking; }
+
+  /* ── Channel item ── */
+  .channel-item {
+    @apply transition-colors rounded-md cursor-pointer;
+    color: #5A5474;
+  }
+  .channel-item:hover { background: #1C1A2E; color: #A89FC8; }
+  .channel-item.active { background: rgba(155,127,232,0.1); color: #C4AAFF; }
+  .channel-item.active .ch-item-icon { opacity: 1; }
+
+  /* ── Présence vocale sous les canaux ── */
+  .voice-presence-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 8px 2px 26px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.12s;
+  }
+  .voice-presence-row:hover { background: #1C1A2E; }
+  .voice-presence-row .vpr-av {
+    width: 16px; height: 16px;
+    border-radius: 50%;
+    font-size: 8px; font-weight: 700; color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .voice-presence-row .vpr-av.speaking { box-shadow: 0 0 0 1.5px #4FD17A; }
+  .voice-presence-row .vpr-name { font-size: 0.72rem; color: #5A5474; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .voice-presence-row .vpr-mic  { font-size: 10px; opacity: 0.4; }
+}
+
+/* ════════════════════════════════════════════════════════════
+   LAYOUT APP — FLEX (remplace le grid fixe)
+════════════════════════════════════════════════════════════ */
+#app {
+  display: flex !important;
+  flex-direction: column;
+  height: 100dvh;
+}
+#app-inner {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* Sidebar gauche */
+#main-sidebar {
+  width: 240px;
+  min-width: 240px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #0D0C18;
+  border-right: 1px solid rgba(255,255,255,0.06);
+  position: relative;
+  transition: transform 0.28s cubic-bezier(0.4,0,0.2,1);
+  /* Subtle purple glow at top */
+}
+#main-sidebar::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 160px;
+  background: radial-gradient(ellipse at 50% -10%, rgba(123,92,229,0.1) 0%, transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+}
+#main-sidebar > * { position: relative; z-index: 1; }
+
+/* Sidebar droite membres */
+#members-sidebar {
+  width: 220px;
+  min-width: 220px;
+  flex-shrink: 0;
+  overflow-y: auto;
+  background: #0D0C18;
+  border-left: 1px solid rgba(255,255,255,0.06);
+  transition: transform 0.25s cubic-bezier(0.4,0,0.2,1);
+}
+
+/* Zone centrale */
+#app-inner > main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #111020;
+}
+
+/* ════════════════════════════════════════════════════════════
+   OVERLAY SIDEBAR MOBILE
+════════════════════════════════════════════════════════════ */
+#sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  z-index: 40;
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+}
+#sidebar-overlay.open { display: block; }
+
+/* ════════════════════════════════════════════════════════════
+   MOBILE TOPBAR (caché par défaut)
+════════════════════════════════════════════════════════════ */
+#mobile-topbar { display: none; }
+
+/* ════════════════════════════════════════════════════════════
+   BOTTOM NAV (caché par défaut)
+════════════════════════════════════════════════════════════ */
+#bottom-nav { display: none; }
+
+/* ════════════════════════════════════════════════════════════
+   ANIMATIONS ENTRÉE
+════════════════════════════════════════════════════════════ */
+#main-sidebar { animation: fadeUp 0.3s ease both; }
+#app-inner > main { animation: fadeUp 0.3s 0.05s ease both; }
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(5px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes blink {
+  0%,100% { opacity:1; }
+  50%     { opacity:0.35; }
+}
+
+/* ════════════════════════════════════════════════════════════
+   RESPONSIVE — TABLET (≤ 900px)
+════════════════════════════════════════════════════════════ */
+@media (max-width: 900px) {
+  #main-sidebar { width: 200px; min-width: 200px; }
+
+  /* Members sidebar → overlay flottant à droite */
+  #members-sidebar {
+    position: fixed;
+    top: 0; right: 0; bottom: 0;
+    z-index: 200;
+    box-shadow: -8px 0 40px rgba(0,0,0,0.5);
+    transform: translateX(100%);
+  }
+  #members-sidebar.open { transform: translateX(0); }
+}
+
+/* ════════════════════════════════════════════════════════════
+   RESPONSIVE — MOBILE (≤ 640px)
+════════════════════════════════════════════════════════════ */
+@media (max-width: 640px) {
+
+  /* Topbar mobile */
+  #mobile-topbar {
+    display: flex !important;
+    align-items: center;
+    height: 48px;
+    padding: 0 10px;
+    background: #0D0C18;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    gap: 8px;
+    flex-shrink: 0;
+    z-index: 30;
   }
 
-  /* Animations */
-  @keyframes pulse_soft {
-    0%, 100% { transform: scale(1); }
-    50%       { transform: scale(1.05); }
+  /* Bottom nav */
+  #bottom-nav {
+    display: flex !important;
+    align-items: center;
+    justify-content: space-around;
+    height: 56px;
+    background: #0D0C18;
+    border-top: 1px solid rgba(255,255,255,0.06);
+    flex-shrink: 0;
+    padding: 0 8px;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
   }
-  .animate-speaking {
-    animation: pulse_soft 0.6s ease-in-out infinite;
+
+  /* Sidebar → drawer */
+  #main-sidebar {
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    z-index: 50;
+    width: 280px;
+    min-width: 280px;
+    transform: translateX(-100%);
+    box-shadow: 4px 0 40px rgba(0,0,0,0.7);
   }
+  #main-sidebar.open { transform: translateX(0); }
+
+  /* Members sidebar mobile */
+  #members-sidebar {
+    position: fixed;
+    top: 0; right: 0; bottom: 0;
+    z-index: 200;
+    width: 260px;
+    min-width: 260px;
+    transform: translateX(100%);
+    box-shadow: -8px 0 40px rgba(0,0,0,0.6);
+  }
+  #members-sidebar.open { transform: translateX(0); }
+
+  /* Cache le header canal desktop sur mobile */
+  .desktop-channel-header { display: none !important; }
+
+  /* Voice panel sur mobile */
+  #voice-panel {
+    margin: 0;
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+  }
+
+  /* Padding réduit */
+  #content-area { padding: 10px; }
+  #message-input-area { padding: 8px 10px; }
+
+  /* Voice peers grid plus compacte */
+  .voice-peer { min-width: 72px !important; padding: 12px !important; }
+
+  /* Toasts pleine largeur */
+  .toast-container { left: 12px !important; right: 12px !important; bottom: 65px !important; }
 }
+
+/* ════════════════════════════════════════════════════════════
+   BOTTOM NAV — STYLES
+════════════════════════════════════════════════════════════ */
+.bn-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: #5A5474;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+  flex: 1;
+  max-width: 80px;
+}
+.bn-btn:hover { color: #A89FC8; background: #1C1A2E; }
+.bn-btn.active { color: #C4AAFF; }
+.bn-btn svg { flex-shrink: 0; }
+.bn-label { font-size: 0.6rem; font-weight: 500; line-height: 1; }

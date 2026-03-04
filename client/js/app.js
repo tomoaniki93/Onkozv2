@@ -14,7 +14,7 @@ const App = (() => {
     document.getElementById('auth-screen').classList.add('hidden');
     const appEl = document.getElementById('app');
     appEl.classList.remove('hidden');
-    appEl.classList.add('grid');
+    appEl.classList.add('flex');
 
     UI.renderFooterUser(user);
 
@@ -321,13 +321,29 @@ const App = (() => {
     el.innerHTML = '';
     if (!members?.length) return;
 
-    const color  = type === 'voice' ? 'text-onkoz-success' : 'text-onkoz-text-muted';
-    const prefix = type === 'voice' ? '🎤 ' : '👁 ';
-
-    const text = document.createElement('span');
-    text.className = `text-[0.65rem] ${color} truncate`;
-    text.textContent = prefix + members.map(m => m.username).join(', ');
-    el.appendChild(text);
+    if (type === 'text') {
+      const span = document.createElement('span');
+      span.className = 'text-[0.65rem] text-onkoz-text-muted truncate pl-5 block';
+      span.textContent = '👁 ' + members.map(m => m.username).join(', ');
+      el.appendChild(span);
+    } else {
+      // Vocal → une ligne par membre avec mini-avatar
+      members.forEach(m => {
+        const row = document.createElement('div');
+        row.className = 'voice-presence-row';
+        const av = document.createElement('div');
+        av.className = `vpr-av ${UI.avatarClass(m.username)}`;
+        av.textContent = m.username[0].toUpperCase();
+        const name = document.createElement('span');
+        name.className = 'vpr-name';
+        name.textContent = m.username;
+        const mic = document.createElement('span');
+        mic.className = 'vpr-mic';
+        mic.textContent = '🎤';
+        row.append(av, name, mic);
+        el.appendChild(row);
+      });
+    }
   }
 
   // ── Sélectionner un salon ─────────────────────────────────────────────────
@@ -352,12 +368,19 @@ const App = (() => {
       Voice.joinRoom(ch.id, 'permanent', `voice:${ch.id}`, ch.name);
       showVoiceBar(ch.name);
     }
+    // Fermer le drawer sidebar sur mobile après sélection
+    if (window.innerWidth <= 640) closeSidebar();
   }
 
   function setChannelHeader(icon, name, category) {
     document.getElementById('channel-icon').textContent = icon;
     document.getElementById('channel-name').textContent = name;
     document.getElementById('channel-category').textContent = category ? `— ${category}` : '';
+    // Mise à jour topbar mobile
+    const mIcon = document.getElementById('mobile-ch-icon');
+    const mName = document.getElementById('mobile-ch-name');
+    if (mIcon) mIcon.textContent = icon;
+    if (mName) mName.textContent  = name;
   }
 
   function findCategoryOfChannel(chId) {
@@ -622,9 +645,42 @@ const App = (() => {
     document.getElementById('close-dm').addEventListener('click', () => Chat.closeDM());
     document.getElementById('btn-audio-settings').addEventListener('click',   () => AudioSettings.toggle());
     document.getElementById('btn-profile-settings').addEventListener('click', () => Profile.openEditPanel());
+
+    // ── Mobile ──
+    document.getElementById('sidebar-toggle')?.addEventListener('click', openSidebar);
+    document.getElementById('mobile-members-btn')?.addEventListener('click', toggleMobileMembers);
+
+    // Swipe depuis bord gauche → ouvre le drawer
+    let _tx = 0;
+    document.addEventListener('touchstart', e => { _tx = e.touches[0].clientX; }, { passive: true });
+    document.addEventListener('touchend', e => {
+      const dx = e.changedTouches[0].clientX - _tx;
+      const sidebar = document.getElementById('main-sidebar');
+      if (_tx < 24 && dx > 56) openSidebar();
+      else if (dx < -72 && sidebar.classList.contains('open')) closeSidebar();
+    }, { passive: true });
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') { closeSidebar(); closeMobileMembers(); }
+    });
   }
 
-  return { launch, kickUser, changeRole, showUnreadBadge, bindEvents };
+  // ── Fonctions mobile ──────────────────────────────────────────────────────
+  function openSidebar() {
+    document.getElementById('main-sidebar').classList.add('open');
+    document.getElementById('sidebar-overlay').classList.add('open');
+  }
+  function closeSidebar() {
+    document.getElementById('main-sidebar').classList.remove('open');
+    document.getElementById('sidebar-overlay').classList.remove('open');
+  }
+  function toggleMobileMembers() {
+    document.getElementById('members-sidebar').classList.toggle('open');
+  }
+  function closeMobileMembers() {
+    document.getElementById('members-sidebar')?.classList.remove('open');
+  }
+
+  return { launch, kickUser, changeRole, showUnreadBadge, bindEvents, openSidebar, closeSidebar, toggleMobileMembers };
 })();
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────
