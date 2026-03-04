@@ -127,6 +127,12 @@ const Voice = (() => {
     socket.off('ms:newProducer', handleNewProducer);
     socket.on('ms:newProducer', handleNewProducer);
 
+    // 10. Consommer les producers déjà actifs (screen share en cours, etc.)
+    socket.off('ms:existingProducers');
+    socket.on('ms:existingProducers', (producers) => {
+      producers.forEach(p => handleNewProducer(p));
+    });
+
     // 10. Consommer les producers déjà actifs (ex: screen share en cours)
     socket.off('ms:existingProducers');
     socket.on('ms:existingProducers', (producers) => {
@@ -259,9 +265,10 @@ const Voice = (() => {
   }
 
   function updateMuteBtn() {
-    const btn = document.getElementById('voice-bar-mute');
+    const btn = document.getElementById('voice-panel-mute');
     if (!btn) return;
-    btn.textContent = isMuted ? '🔇' : '🎤';
+    const icon = document.getElementById('voice-panel-mute-icon') || btn;
+    icon.textContent = isMuted ? '🔇' : '🎤';
     btn.title       = isMuted ? 'Activer le micro' : 'Couper le micro';
     btn.classList.toggle('muted', isMuted);
   }
@@ -430,7 +437,7 @@ const Voice = (() => {
   }
 
   function updateShareBtn(sharing) {
-    const btn = document.getElementById('voice-bar-screenshare');
+    const btn = document.getElementById('voice-panel-screenshare');
     if (!btn) return;
     if (sharing) {
       btn.textContent = '⏹';
