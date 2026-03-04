@@ -1,63 +1,85 @@
-/* ── Voice Module ────────────────────────────────────────────────────────── */
-const Voice = (() => {
-  let device = null, sendTransport = null, recvTransport = null;
-  let producer = null, consumers = new Map(), localStream = null;
-  let isMuted = false, socket = null;
-  let currentRoomId = null, currentChannelId = null, currentType = null;
-  let pendingPeers = [];
+/* ── Voice Module ─────────────────────────────────────────────────────────────
+   Gestion de la voix via mediasoup-client + partage d'écran.
 
-  // ── Partage d'écran ────────────────────────────────────────────────────────
+   Pipeline audio (PATCH NoiseReducer) :
+     getUserMedia → NoiseReducer.process() → sendTransport.produce()
+
+   Le stream brut ne passe JAMAIS directement à mediasoup.
+   NoiseReducer.process() retourne le stream traité (ou le stream brut si
+   la réduction de bruit est désactivée dans les options).
+   ─────────────────────────────────────────────────────────────────────────── */
+const Voice = (() => {
+
+  // ── État interne ────────────────────────────────────────────────────────────
+  let device        = null;
+  let sendTransport = null;
+  let recvTransport = null;
+  let producer      = null;
+  let consumers     = new Map(); // peerId → consumer audio
+  let localStream   = null;     // stream brut (micro)
+  let processedStream = null;   // stream après NoiseReducer (envoyé à mediasoup)
+  let isMuted       = false;
+  let socket        = null;
+
+  let currentRoomId    = null;
+  let currentChannelId = null;
+  let currentType      = null;  // 'permanent' | 'ephemeral'
+  let pendingPeers     = [];
+
+  // ── Partage d'écran ─────────────────────────────────────────────────────────
   let screenProducer  = null;
   let screenStream    = null;
   let isSharing       = false;
-  let screenConsumers = new Map(); // peerId → consumer
+  let screenConsumers = new Map(); // peerId → consumer vidéo
 
-  function init(s) {
-    socket = s;
+  // ── Init ────────────────────────────────────────────────────────────────────
+  function init(s) { socket = s; }
 
-    socket.on('ms:existingProducers', (producers) => {
-      if (!recvTransport || !device) {
-        producers.forEach(p => pendingPeers.push(p));
-        return;
-      }
-      producers.forEach(p => handleNewProducer(p));
-    });
-
-    socket.on('screen:started', ({ username }) => {
-      AudioSettings.showToast('\u{1F5A5}\uFE0F ' + username + ' partage son ecran');
-    });
-  }
-
-  // ── Rejoindre un salon vocal ───────────────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  REJOINDRE UN SALON
+  // ═══════════════════════════════════════════════════════════════════════════
   async function joinRoom(channelId, type, roomId, channelName) {
     if (currentRoomId) await leaveRoom();
-    currentRoomId = roomId; currentChannelId = channelId; currentType = type;
+    currentRoomId    = roomId;
+    currentChannelId = channelId;
+    currentType      = type;
 
     renderVoiceRoom(channelName);
 
     try {
+      // 1. Obtenir le stream brut depuis le micro
       const micId = AudioSettings.getMicId();
-      const rawStream = await navigator.mediaDevices.getUserMedia({
-        audio: micId && micId !== 'default'
-          ? { deviceId: { ideal: micId }, echoCancellation: true, noiseSuppression: true }
-          : { echoCancellation: true, noiseSuppression: true },
+      localStream = await navigator.mediaDevices.getUserMedia({
+        audio: micId && micId !== 'default' ? { deviceId: { ideal: micId } } : true,
         video: false,
       });
 
-      // Appliquer la chaîne de réduction de bruit
-      localStream = await NoiseReducer.process(rawStream);
+      // 2. ✅ PATCH — Passer le stream par le pipeline de traitement audio
+      //    HighPass → LowPass → Compresseur → NoiseGate (AudioWorklet)
+      //    Si NoiseReducer est désactivé dans les options → retourne localStream brut
+      processedStream = await NoiseReducer.process(localStream);
+      console.log('[Voice] NoiseReducer actif :', processedStream !== localStream);
+
+      // 3. Créer le device mediasoup-client
       device = new mediasoupClient.Device();
 
+      // 4. Charger les capabilities du router
       const { caps } = await socketEmit('ms:getRouterCapabilities', { roomId });
       await device.load({ routerRtpCapabilities: caps });
 
-      // ── Send transport ──
+      // 5. Transport d'envoi
       const sendParams = await socketEmit('ms:createTransport', { roomId });
       sendTransport = device.createSendTransport(sendParams);
+
       sendTransport.on('connect', async ({ dtlsParameters }, cb, eb) => {
-        try { await socketEmit('ms:connectTransport', { roomId, transportId: sendTransport.id, dtlsParameters }); cb(); }
-        catch (e) { eb(e); }
+        try {
+          await socketEmit('ms:connectTransport', {
+            roomId, transportId: sendTransport.id, dtlsParameters,
+          });
+          cb();
+        } catch (e) { eb(e); }
       });
+
       sendTransport.on('produce', async ({ kind, rtpParameters, appData }, cb, eb) => {
         try {
           const { producerId } = await socketEmit('ms:produce', {
@@ -67,51 +89,71 @@ const Voice = (() => {
         } catch (e) { eb(e); }
       });
 
-      producer = await sendTransport.produce({ track: localStream.getAudioTracks()[0] });
-
-      // ── Recv transport ──
-      const recvParams = await socketEmit('ms:createTransport', { roomId });
-      recvTransport = device.createRecvTransport(recvParams);
-      recvTransport.on('connect', async ({ dtlsParameters }, cb, eb) => {
-        try { await socketEmit('ms:connectTransport', { roomId, transportId: recvTransport.id, dtlsParameters }); cb(); }
-        catch (e) { eb(e); }
+      // 6. ✅ PATCH — Envoyer la piste TRAITÉE (pas la piste brute)
+      producer = await sendTransport.produce({
+        track: processedStream.getAudioTracks()[0],
+        codecOptions: { opusStereo: false, opusDtx: true },
       });
 
-      // Consommer les pairs en attente
+      // 7. Transport de réception
+      const recvParams = await socketEmit('ms:createTransport', { roomId });
+      recvTransport = device.createRecvTransport(recvParams);
+
+      recvTransport.on('connect', async ({ dtlsParameters }, cb, eb) => {
+        try {
+          await socketEmit('ms:connectTransport', {
+            roomId, transportId: recvTransport.id, dtlsParameters,
+          });
+          cb();
+        } catch (e) { eb(e); }
+      });
+
+      // 8. Consommer les pairs déjà présents (arrivés avant recvTransport)
       if (pendingPeers.length > 0) {
-        pendingPeers.forEach(p => { addPeerToUI(p.peerId, p.username); handleNewProducer(p); });
+        pendingPeers.forEach(p => {
+          addPeerToUI(p.peerId, p.username);
+          handleNewProducer(p);
+        });
         pendingPeers = [];
       }
 
     } catch (err) {
-      console.error('[Voice]', err);
+      console.error('[Voice] Erreur joinRoom :', err);
       showVoiceError(err.message);
       return;
     }
 
-    socket.off('ms:newProducer', handleNewProducer); // évite les doublons si rejoin
+    // 9. Écouter les nouveaux producers
+    socket.off('ms:newProducer', handleNewProducer);
     socket.on('ms:newProducer', handleNewProducer);
+
     updateMuteBtn();
   }
 
-  // ── Consommer un producer distant ─────────────────────────────────────────
-  async function handleNewProducer({ peerId, username, producerId, appData }) {
-    if (!recvTransport || !device) return;
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  CONSOMMER UN PRODUCER DISTANT
+  // ═══════════════════════════════════════════════════════════════════════════
+  async function handleNewProducer({ peerId, producerId, username, appData }) {
+    if (!recvTransport || !device) {
+      pendingPeers.push({ peerId, producerId, username, appData });
+      return;
+    }
     try {
       const data = await socketEmit('ms:consume', {
-        roomId: currentRoomId, producerPeerId: peerId,
-        transportId: recvTransport.id, rtpCapabilities: device.rtpCapabilities,
-        producerId, // passer le producerId exact pour multi-producer
+        roomId: currentRoomId,
+        producerId,
+        producerPeerId: peerId,
+        transportId: recvTransport.id,
+        rtpCapabilities: device.rtpCapabilities,
       });
       const consumer = await recvTransport.consume(data);
-      const isScreen = appData?.screenShare || data.appData?.screenShare || consumer.track.kind === 'video';
 
-      if (isScreen) {
+      if (consumer.track.kind === 'video') {
         // ── Flux vidéo = partage d'écran ──
         screenConsumers.set(peerId, consumer);
         showScreenOverlay(consumer.track, peerId, username || peerId);
       } else {
-        // ── Flux audio normal ──
+        // ── Flux audio ──
         consumers.set(peerId, consumer);
         const audio = new Audio();
         audio.srcObject = new MediaStream([consumer.track]);
@@ -120,31 +162,65 @@ const Voice = (() => {
         audio.play().catch(console.warn);
         addPeerToUI(peerId, username);
       }
-    } catch (err) { console.error('[Voice] consume:', err); }
+    } catch (err) {
+      console.error('[Voice] consume :', err);
+    }
   }
 
-  // ── Quitter le salon ───────────────────────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  QUITTER LE SALON
+  // ═══════════════════════════════════════════════════════════════════════════
   async function leaveRoom() {
     if (!currentRoomId) return;
-    if (isSharing) await stopScreenShare(false);
-    NoiseReducer.dispose();
 
+    // Arrêter le partage d'écran proprement
+    if (isSharing) await stopScreenShare(false);
+
+    // Signaler au serveur
     currentType === 'permanent'
-      ? socket.emit('voice:leave',    { channelId: currentChannelId })
+      ? socket.emit('voice:leave',     { channelId: currentChannelId })
       : socket.emit('ephemeral:leave', { eid: currentChannelId });
 
+    // Détacher le listener
     socket.off('ms:newProducer', handleNewProducer);
-    producer?.close(); sendTransport?.close(); recvTransport?.close();
+
+    // Fermer les transports mediasoup
+    producer?.close();
+    sendTransport?.close();
+    recvTransport?.close();
+
+    // ✅ PATCH — Arrêter le stream traité (libère l'AudioContext de NoiseReducer)
+    if (processedStream && processedStream !== localStream) {
+      processedStream.getTracks().forEach(t => t.stop());
+    }
+    processedStream = null;
+
+    // Arrêter le stream brut (libère le micro)
     localStream?.getTracks().forEach(t => t.stop());
+    localStream = null;
+
+    // ✅ PATCH — Fermer l'AudioContext de NoiseReducer
+    if (typeof NoiseReducer !== 'undefined') {
+      NoiseReducer.dispose();
+    }
+
+    // Fermer tous les consumers
     consumers.forEach(c => c.close());
     screenConsumers.forEach(c => c.close());
-    consumers.clear(); screenConsumers.clear();
-    producer = recvTransport = sendTransport = localStream = device = null;
+    consumers.clear();
+    screenConsumers.clear();
+
+    // Réinitialiser l'état
+    producer = sendTransport = recvTransport = device = null;
     currentRoomId = currentChannelId = currentType = null;
-    isMuted = false; pendingPeers = [];
+    isMuted = false;
+    pendingPeers = [];
 
-    hideAllScreenOverlays();
+    // Nettoyer les overlays
+    document.querySelectorAll('[id^="screen-overlay-"]').forEach(el => el.remove());
+    hideLocalPreview();
 
+    // Réinitialiser la zone de contenu
     document.getElementById('content-area').innerHTML = `
       <div class="flex flex-col items-center justify-center flex-1 gap-3 text-onkoz-text-muted">
         <div class="text-6xl">🎤</div>
@@ -156,9 +232,36 @@ const Voice = (() => {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
+  //  MUTE / UNMUTE
+  // ═══════════════════════════════════════════════════════════════════════════
+  function toggleMute() {
+    isMuted = !isMuted;
+
+    // Pause/resume au niveau mediasoup (coupe l'envoi RTP)
+    if (producer) {
+      isMuted ? producer.pause() : producer.resume();
+    }
+
+    // ✅ PATCH — Muter la piste traitée (celle que mediasoup utilise)
+    processedStream?.getAudioTracks().forEach(t => { t.enabled = !isMuted; });
+
+    // Garder localStream en sync
+    localStream?.getAudioTracks().forEach(t => { t.enabled = !isMuted; });
+
+    updateMuteBtn();
+  }
+
+  function updateMuteBtn() {
+    const btn = document.getElementById('voice-bar-mute');
+    if (!btn) return;
+    btn.textContent = isMuted ? '🔇' : '🎤';
+    btn.title       = isMuted ? 'Activer le micro' : 'Couper le micro';
+    btn.classList.toggle('muted', isMuted);
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
   //  PARTAGE D'ÉCRAN
   // ═══════════════════════════════════════════════════════════════════════════
-
   async function toggleScreenShare() {
     isSharing ? await stopScreenShare(true) : await startScreenShare();
   }
@@ -179,7 +282,7 @@ const Voice = (() => {
       screenProducer = await sendTransport.produce({
         track: videoTrack,
         appData: { kind: 'video', screenShare: true },
-        encodings: [{ maxBitrate: 1_500_000 }],
+        encodings: [{ maxBitrate: 1_500_000, scaleResolutionDownBy: 1 }],
         codecOptions: { videoGoogleStartBitrate: 1000 },
       });
 
@@ -187,11 +290,15 @@ const Voice = (() => {
       updateShareBtn(true);
       showLocalPreview(screenStream);
 
-      // Arrêt via bouton natif navigateur
+      // Informer les autres membres du salon
+      socket.emit('screen:sharing', { roomId: currentRoomId, sharing: true });
+
+      // Arrêt via le bouton natif du navigateur (Chrome "Arrêter le partage")
       videoTrack.addEventListener('ended', () => stopScreenShare(true));
 
     } catch (err) {
       if (err.name !== 'NotAllowedError') {
+        console.error('[ScreenShare]', err);
         AudioSettings.showToast(`❌ Partage impossible : ${err.message}`);
       }
     }
@@ -203,8 +310,10 @@ const Voice = (() => {
     screenProducer = null;
     screenStream   = null;
     isSharing      = false;
+
     updateShareBtn(false);
     hideLocalPreview();
+
     if (notify && socket && currentRoomId) {
       socket.emit('screen:stop', { roomId: currentRoomId });
     }
@@ -213,51 +322,35 @@ const Voice = (() => {
   // ── Aperçu local (partageur) ───────────────────────────────────────────────
   function showLocalPreview(stream) {
     hideLocalPreview();
+
     const overlay = document.createElement('div');
     overlay.id = 'screen-local-preview';
     overlay.className = 'fixed inset-0 z-[200] bg-black/85 flex flex-col items-center justify-center gap-4';
 
-    // Badge "En direct"
     const badge = document.createElement('div');
     badge.className = 'flex items-center gap-2 bg-onkoz-surface border border-onkoz-border rounded-full px-4 py-2 text-sm font-semibold text-onkoz-text';
-    badge.innerHTML = `<span class="w-2 h-2 rounded-full bg-onkoz-danger animate-pulse shrink-0"></span> Vous partagez votre écran`;
+    badge.innerHTML = '<span class="w-2 h-2 rounded-full bg-onkoz-success animate-pulse shrink-0"></span> Tu partages ton écran';
 
-    // Vidéo
     const video = document.createElement('video');
-    video.className = 'max-w-5xl max-h-[65vh] rounded-xl border border-onkoz-border shadow-dm object-contain';
+    video.className = 'max-w-5xl max-h-[70vh] rounded-xl border border-onkoz-border shadow-dm object-contain';
     video.srcObject = stream;
     video.autoplay  = true;
     video.muted     = true;
 
-    // Boutons
     const btns = document.createElement('div');
     btns.className = 'flex items-center gap-3';
 
     const stopBtn = document.createElement('button');
-    stopBtn.className = 'flex items-center gap-2 px-5 py-2.5 bg-onkoz-danger hover:bg-red-700 text-white font-semibold rounded-lg transition-colors';
+    stopBtn.className = 'flex items-center gap-2 px-5 py-2.5 bg-onkoz-danger/20 hover:bg-onkoz-danger/30 text-onkoz-danger border border-onkoz-danger/30 font-semibold rounded-lg transition-colors';
     stopBtn.innerHTML = '⏹ Arrêter le partage';
     stopBtn.addEventListener('click', () => stopScreenShare(true));
 
-    const minimizeBtn = document.createElement('button');
-    minimizeBtn.className = 'flex items-center gap-2 px-4 py-2.5 bg-onkoz-surface border border-onkoz-border hover:bg-onkoz-hover text-onkoz-text font-medium rounded-lg transition-colors text-sm';
-    minimizeBtn.innerHTML = '⬇ Réduire';
-    let minimized = false;
-    minimizeBtn.addEventListener('click', () => {
-      minimized = !minimized;
-      if (minimized) {
-        overlay.className = 'fixed bottom-20 right-4 z-[200] flex flex-col items-end gap-2';
-        video.className   = 'w-56 h-32 rounded-lg border border-onkoz-border shadow-dm object-contain';
-        badge.classList.add('hidden');
-        minimizeBtn.innerHTML = '⬆ Agrandir';
-      } else {
-        overlay.className = 'fixed inset-0 z-[200] bg-black/85 flex flex-col items-center justify-center gap-4';
-        video.className   = 'max-w-5xl max-h-[65vh] rounded-xl border border-onkoz-border shadow-dm object-contain';
-        badge.classList.remove('hidden');
-        minimizeBtn.innerHTML = '⬇ Réduire';
-      }
-    });
+    const hideBtn = document.createElement('button');
+    hideBtn.className = 'flex items-center gap-2 px-4 py-2.5 bg-onkoz-surface border border-onkoz-border hover:bg-onkoz-hover text-onkoz-text font-medium rounded-lg transition-colors text-sm';
+    hideBtn.innerHTML = '✕ Masquer l\'aperçu';
+    hideBtn.addEventListener('click', () => overlay.remove());
 
-    btns.append(stopBtn, minimizeBtn);
+    btns.append(stopBtn, hideBtn);
     overlay.append(badge, video, btns);
     document.body.appendChild(overlay);
   }
@@ -274,20 +367,16 @@ const Voice = (() => {
     overlay.id = `screen-overlay-${peerId}`;
     overlay.className = 'fixed inset-0 z-[200] bg-black/90 flex flex-col items-center justify-center gap-4';
 
-    // Badge
     const badge = document.createElement('div');
     badge.className = 'flex items-center gap-2 bg-onkoz-surface border border-onkoz-border rounded-full px-4 py-2 text-sm font-semibold text-onkoz-text';
     badge.innerHTML = `<span class="w-2 h-2 rounded-full bg-onkoz-success animate-pulse shrink-0"></span> <strong>${username}</strong>&nbsp;partage son écran`;
 
-    // Vidéo
     const video = document.createElement('video');
     video.className = 'max-w-5xl max-h-[70vh] rounded-xl border border-onkoz-border shadow-dm object-contain';
     video.srcObject = new MediaStream([track]);
     video.autoplay  = true;
     video.muted     = false;
-    video.controls  = false;
 
-    // Boutons
     const btns = document.createElement('div');
     btns.className = 'flex items-center gap-3';
 
@@ -303,15 +392,15 @@ const Voice = (() => {
     minimizeBtn.addEventListener('click', () => {
       minimized = !minimized;
       if (minimized) {
-        overlay.className = 'fixed bottom-20 right-4 z-[200] flex flex-col items-end gap-2';
-        video.className   = 'w-56 h-32 rounded-lg border border-onkoz-border shadow-dm object-contain';
-        badge.classList.add('hidden');
-        minimizeBtn.innerHTML = '⬆ Agrandir';
+        video.classList.remove('max-w-5xl', 'max-h-[70vh]');
+        video.classList.add('w-64', 'h-36');
+        overlay.className = 'fixed bottom-20 right-4 z-[200] flex flex-col items-center gap-2';
+        minimizeBtn.textContent = '⬆ Agrandir';
       } else {
+        video.classList.add('max-w-5xl', 'max-h-[70vh]');
+        video.classList.remove('w-64', 'h-36');
         overlay.className = 'fixed inset-0 z-[200] bg-black/90 flex flex-col items-center justify-center gap-4';
-        video.className   = 'max-w-5xl max-h-[70vh] rounded-xl border border-onkoz-border shadow-dm object-contain';
-        badge.classList.remove('hidden');
-        minimizeBtn.innerHTML = '⬇ Réduire';
+        minimizeBtn.textContent = '⬇ Réduire';
       }
     });
 
@@ -320,51 +409,29 @@ const Voice = (() => {
     document.body.appendChild(overlay);
   }
 
-  function hideAllScreenOverlays() {
-    document.querySelectorAll('[id^="screen-overlay-"]').forEach(el => el.remove());
-    hideLocalPreview();
-    screenConsumers.forEach(c => c.close());
-    screenConsumers.clear();
-  }
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  //  HELPERS
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  function toggleMute() {
-    isMuted = !isMuted;
-    localStream?.getAudioTracks().forEach(t => { t.enabled = !isMuted; });
-    updateMuteBtn();
-  }
-
-  function updateMuteBtn() {
-    const icon = document.getElementById('voice-panel-mute-icon');
-    const btn  = document.getElementById('voice-panel-mute');
-    if (!icon || !btn) return;
-    if (isMuted) {
-      icon.textContent = '🔇';
-      btn.title = 'Activer le micro';
-      btn.classList.add('text-onkoz-danger', 'bg-onkoz-danger/15');
-      btn.classList.remove('text-onkoz-text-muted');
+  function hideScreenOverlay(peerId = null) {
+    if (peerId) {
+      document.getElementById(`screen-overlay-${peerId}`)?.remove();
+      screenConsumers.get(peerId)?.close();
+      screenConsumers.delete(peerId);
     } else {
-      icon.textContent = '🎤';
-      btn.title = 'Couper le micro';
-      btn.classList.remove('text-onkoz-danger', 'bg-onkoz-danger/15');
-      btn.classList.add('text-onkoz-text-muted');
+      document.querySelectorAll('[id^="screen-overlay-"]').forEach(el => el.remove());
+      screenConsumers.forEach(c => c.close());
+      screenConsumers.clear();
+      hideLocalPreview();
     }
   }
 
   function updateShareBtn(sharing) {
-    const icon = document.getElementById('voice-panel-screen-icon');
-    const btn  = document.getElementById('voice-panel-screenshare');
-    if (!icon || !btn) return;
+    const btn = document.getElementById('voice-bar-screenshare');
+    if (!btn) return;
     if (sharing) {
-      icon.textContent = '⏹';
+      btn.textContent = '⏹';
       btn.title = 'Arrêter le partage';
       btn.classList.add('text-onkoz-danger');
       btn.classList.remove('text-onkoz-text-muted');
     } else {
-      icon.textContent = '🖥️';
+      btn.textContent = '🖥️';
       btn.title = 'Partager l\'écran';
       btn.classList.remove('text-onkoz-danger');
       btn.classList.add('text-onkoz-text-muted');
@@ -372,115 +439,13 @@ const Voice = (() => {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  //  ANNONCES VOCALES (style TeamSpeak)
+  //  UI — PEERS
   // ═══════════════════════════════════════════════════════════════════════════
-
-  const KEY_ANNOUNCE = 'onkoz_voice_announce'; // 'true' | 'false'
-
-  function isAnnounceEnabled() {
-    return localStorage.getItem(KEY_ANNOUNCE) !== 'false';
-  }
-
-  // File d'attente pour éviter les chevauchements
-  const announceQueue = [];
-  let   isAnnouncing  = false;
-
-  function announce(username, action) {
-    if (!isAnnounceEnabled()) return;
-    announceQueue.push({ username, action });
-    if (!isAnnouncing) processAnnounceQueue();
-  }
-
-  function processAnnounceQueue() {
-    if (announceQueue.length === 0) { isAnnouncing = false; return; }
-    isAnnouncing = true;
-    const { username, action } = announceQueue.shift();
-
-    // 1. Son d'entrée/sortie via Web Audio API
-    playJoinSound(action === 'join');
-
-    // 2. Synthèse vocale après le son (délai 350ms)
-    setTimeout(() => {
-      const msg  = action === 'join'
-        ? `${username} a rejoint le canal`
-        : `${username} a quitté le canal`;
-
-      if (!window.speechSynthesis) { processAnnounceQueue(); return; }
-
-      // Annuler toute synthèse en cours
-      window.speechSynthesis.cancel();
-
-      const utt  = new SpeechSynthesisUtterance(msg);
-      utt.lang   = 'fr-FR';
-      utt.volume = parseFloat(localStorage.getItem('onkoz_announce_volume') || '0.8');
-      utt.rate   = 1.05;
-      utt.pitch  = 1.0;
-
-      // Choisir une voix française si disponible
-      const voices = window.speechSynthesis.getVoices();
-      const frVoice = voices.find(v => v.lang.startsWith('fr')) || null;
-      if (frVoice) utt.voice = frVoice;
-
-      utt.onend   = () => setTimeout(processAnnounceQueue, 200);
-      utt.onerror = () => setTimeout(processAnnounceQueue, 200);
-
-      window.speechSynthesis.speak(utt);
-    }, 350);
-  }
-
-  // Son court généré via Web Audio (pas de fichier externe nécessaire)
-  function playJoinSound(isJoin) {
-    try {
-      const ctx  = new (window.AudioContext || window.webkitAudioContext)();
-      const vol  = parseFloat(localStorage.getItem('onkoz_announce_volume') || '0.8') * 0.4;
-      const gain = ctx.createGain();
-      gain.gain.value = vol;
-      gain.connect(ctx.destination);
-
-      if (isJoin) {
-        // Deux notes montantes (do → mi)
-        playNote(ctx, gain, 523.25, 0,    0.12); // Do5
-        playNote(ctx, gain, 659.25, 0.13, 0.12); // Mi5
-      } else {
-        // Deux notes descendantes (mi → do)
-        playNote(ctx, gain, 659.25, 0,    0.12); // Mi5
-        playNote(ctx, gain, 523.25, 0.13, 0.12); // Do5
-      }
-
-      // Fermer le contexte après la lecture
-      setTimeout(() => ctx.close(), 800);
-    } catch (e) { /* silencieux si AudioContext indisponible */ }
-  }
-
-  function playNote(ctx, dest, freq, startOffset, duration) {
-    const osc  = ctx.createOscillator();
-    const env  = ctx.createGain();
-    const now  = ctx.currentTime + startOffset;
-
-    osc.type            = 'sine';
-    osc.frequency.value = freq;
-
-    // Enveloppe ADSR douce
-    env.gain.setValueAtTime(0,   now);
-    env.gain.linearRampToValueAtTime(1, now + 0.01);
-    env.gain.linearRampToValueAtTime(0, now + duration);
-
-    osc.connect(env);
-    env.connect(dest);
-    osc.start(now);
-    osc.stop(now + duration + 0.05);
-  }
-
-  // ── Gestion des voix (chargement asynchrone) ───────────────────────────────
-  if (window.speechSynthesis) {
-    window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
-    window.speechSynthesis.getVoices(); // déclencher le chargement
-  }
-
   function addPeerToUI(peerId, username) {
     if (document.getElementById(`vp-${peerId}`)) return;
     const container = document.getElementById('voice-peers-container');
     if (!container) return;
+
     const peer = document.createElement('div');
     peer.id = `vp-${peerId}`;
     peer.className = 'voice-peer flex flex-col items-center gap-2 px-4 py-3 bg-onkoz-surface rounded-xl min-w-[80px] transition-all';
@@ -494,7 +459,7 @@ const Voice = (() => {
     document.getElementById(`vp-${peerId}`)?.remove();
     consumers.get(peerId)?.close();
     consumers.delete(peerId);
-    // Fermer l'overlay si ce pair partageait
+    // Fermer l'overlay de partage d'écran si ce pair partageait
     document.getElementById(`screen-overlay-${peerId}`)?.remove();
     screenConsumers.get(peerId)?.close();
     screenConsumers.delete(peerId);
@@ -506,7 +471,7 @@ const Voice = (() => {
       <div class="flex flex-col items-center justify-center flex-1 gap-6">
         <h3 class="text-xl font-semibold text-onkoz-text-md">🎤 ${channelName}</h3>
         <div id="voice-peers-container" class="flex flex-wrap gap-4 justify-center">
-          <div class="voice-peer flex flex-col items-center gap-2 px-4 py-3 bg-onkoz-surface rounded-xl min-w-[80px]">
+          <div class="voice-peer flex flex-col items-center gap-2 px-4 py-3 bg-onkoz-surface rounded-xl min-w-[80px]" id="vp-self">
             <div class="${UI.avatarClass(user.username)} w-12 h-12 rounded-full flex items-center justify-center text-xl font-bold text-white uppercase">${user.username[0]}</div>
             <span class="text-[0.8rem] text-onkoz-text-md text-center">${user.username} <span class="text-onkoz-text-muted">(moi)</span></span>
           </div>
@@ -523,31 +488,50 @@ const Voice = (() => {
       </div>`;
   }
 
-  function socketEmit(event, data) {
-    return new Promise((resolve, reject) => {
-      socket.emit(event, data, res => res?.error ? reject(new Error(res.error)) : resolve(res));
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  EVENTS SOCKET ENTRANTS
+  // ═══════════════════════════════════════════════════════════════════════════
+  function onPeerJoined({ peerId, username }) {
+    addPeerToUI(peerId, username);
+  }
+
+  function onPeerLeft({ peerId }) {
+    removePeerFromUI(peerId);
+  }
+
+  function onExistingPeers(peers) {
+    if (!recvTransport) {
+      pendingPeers = peers;
+      return;
+    }
+    peers.forEach(p => {
+      addPeerToUI(p.peerId, p.username);
+      handleNewProducer(p);
     });
   }
 
-  function onPeerJoined({ peerId, username }) {
-    addPeerToUI(peerId, username);
-    announce(username, 'join');
-  }
-  function onPeerLeft({ peerId, username }) {
-    // Récupérer le username depuis le DOM si pas fourni
-    const el   = document.getElementById(`vp-${peerId}`);
-    const name = username || el?.querySelector('span')?.textContent?.trim() || 'Utilisateur';
-    removePeerFromUI(peerId);
-    announce(name, 'leave');
-  }
-  function onExistingPeers(peers) {
-    if (!recvTransport) { pendingPeers = peers; return; }
-    peers.forEach(p => { addPeerToUI(p.peerId, p.username); handleNewProducer(p); });
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  HELPER
+  // ═══════════════════════════════════════════════════════════════════════════
+  function socketEmit(event, data) {
+    return new Promise((resolve, reject) => {
+      socket.emit(event, data, res =>
+        res?.error ? reject(new Error(res.error)) : resolve(res)
+      );
+    });
   }
 
+  // ── API publique ────────────────────────────────────────────────────────────
   return {
-    init, joinRoom, leaveRoom, toggleMute, toggleScreenShare,
-    onPeerJoined, onPeerLeft, onExistingPeers,
+    init,
+    joinRoom,
+    leaveRoom,
+    toggleMute,
+    toggleScreenShare,
+    onPeerJoined,
+    onPeerLeft,
+    onExistingPeers,
     getCurrentRoomId: () => currentRoomId,
   };
+
 })();

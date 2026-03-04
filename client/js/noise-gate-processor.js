@@ -1,52 +1,50 @@
-/* ── noise-gate-processor.js ──────────────────────────────────────────────────
-   AudioWorkletProcessor : noise gate avec lissage exponentiel.
-   Tourne sur le thread audio dédié → pas de crépitement.
+/* ── NoiseGateProcessor (AudioWorklet) ───────────────────────────────────────
+   Gate avec attaque rapide et relâchement progressif.
+   - threshold : amplitude RMS en dessous de laquelle le son est coupé
+   - smoothing  : coefficient de lissage du gain (1 = aucun changement)
+                  0.97 ≈ 10ms de réaction, 0.99 ≈ 50ms
    ─────────────────────────────────────────────────────────────────────────── */
 class NoiseGateProcessor extends AudioWorkletProcessor {
   static get parameterDescriptors() {
     return [
       { name: 'threshold', defaultValue: 0.015, minValue: 0, maxValue: 1 },
-      { name: 'smoothing', defaultValue: 0.995, minValue: 0, maxValue: 1 },
+      { name: 'smoothing',  defaultValue: 0.980, minValue: 0, maxValue: 0.9999 },
     ];
   }
 
   constructor() {
     super();
-    this._envelope = 0;
-    this._gain     = 0;  // gain actuel lissé
+    this._gain = 0.0; // commence fermé
   }
 
   process(inputs, outputs, parameters) {
-    const input     = inputs[0];
-    const output    = outputs[0];
-    if (!input || !input[0]) return true;
+    const inp = inputs[0]?.[0];
+    const out = outputs[0]?.[0];
+    if (!inp || !out) return true;
 
     const threshold = parameters.threshold[0];
-    const smoothing = parameters.smoothing[0];
+    const smoothing  = parameters.smoothing[0];
 
-    for (let ch = 0; ch < output.length; ch++) {
-      const inp = input[ch]  || new Float32Array(128);
-      const out = output[ch] || new Float32Array(128);
+    // Calcul RMS sur le bloc
+    let sum = 0;
+    for (let i = 0; i < inp.length; i++) sum += inp[i] * inp[i];
+    const rms = Math.sqrt(sum / inp.length);
 
-      for (let i = 0; i < inp.length; i++) {
-        const abs = Math.abs(inp[i]);
+    // Cible : ouvert si RMS > seuil, fermé sinon
+    const targetGain = rms > threshold ? 1.0 : 0.0;
 
-        // Suivre l'enveloppe du signal
-        if (abs > this._envelope) {
-          this._envelope = abs;                         // attaque rapide
-        } else {
-          this._envelope = this._envelope * 0.999 + abs * 0.001;  // release lent
-        }
+    // Lissage asymétrique : ouverture rapide, fermeture plus douce
+    // → évite de couper net au milieu d'un mot
+    const coeff = targetGain > this._gain
+      ? (1 - smoothing) * 3  // ouverture 3x plus rapide
+      : (1 - smoothing);     // fermeture normale
 
-        // Gain cible : 1 si au-dessus du seuil, 0 sinon
-        const targetGain = this._envelope > threshold ? 1.0 : 0.0;
-
-        // Lisser le gain pour éviter les clics (tau ~50 ms)
-        this._gain = this._gain * smoothing + targetGain * (1 - smoothing);
-
-        out[i] = inp[i] * this._gain;
-      }
+    for (let i = 0; i < inp.length; i++) {
+      this._gain += (targetGain - this._gain) * coeff;
+      this._gain  = Math.max(0, Math.min(1, this._gain));
+      out[i] = inp[i] * this._gain;
     }
+
     return true;
   }
 }
