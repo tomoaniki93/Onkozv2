@@ -46,6 +46,19 @@ const Voice = (() => {
 
     renderVoiceRoom(channelName);
 
+    // ── IMPORTANT : enregistrer les listeners AVANT toute opération async ──
+    // ms:existingProducers et ms:newProducer arrivent quasi-immédiatement après
+    // voice:join (côté serveur). Si on les enregistre après getUserMedia +
+    // transports (plusieurs secondes), les events sont perdus → pas de son.
+    // handleNewProducer met en file d'attente si recvTransport pas encore prêt.
+    pendingPeers = [];
+    socket.off('ms:newProducer', handleNewProducer);
+    socket.on('ms:newProducer', handleNewProducer);
+    socket.off('ms:existingProducers');
+    socket.on('ms:existingProducers', (producers) => {
+      producers.forEach(p => handleNewProducer(p));
+    });
+
     try {
       // 1. Obtenir le stream brut depuis le micro
       const micId = AudioSettings.getMicId();
@@ -54,9 +67,7 @@ const Voice = (() => {
         video: false,
       });
 
-      // 2. ✅ PATCH — Passer le stream par le pipeline de traitement audio
-      //    HighPass → LowPass → Compresseur → NoiseGate (AudioWorklet)
-      //    Si NoiseReducer est désactivé dans les options → retourne localStream brut
+      // 2. Passer le stream par le pipeline de traitement audio
       processedStream = await NoiseReducer.process(localStream);
       console.log('[Voice] NoiseReducer actif :', processedStream !== localStream);
 
@@ -89,7 +100,7 @@ const Voice = (() => {
         } catch (e) { eb(e); }
       });
 
-      // 6. ✅ PATCH — Envoyer la piste TRAITÉE (pas la piste brute)
+      // 6. Envoyer la piste TRAITÉE (jamais le stream brut)
       producer = await sendTransport.produce({
         track: processedStream.getAudioTracks()[0],
         codecOptions: { opusStereo: false, opusDtx: true },
@@ -108,13 +119,14 @@ const Voice = (() => {
         } catch (e) { eb(e); }
       });
 
-      // 8. Consommer les pairs déjà présents (arrivés avant recvTransport)
+      // 8. Vider la file d'attente — events reçus pendant l'init async
       if (pendingPeers.length > 0) {
-        pendingPeers.forEach(p => {
-          addPeerToUI(p.peerId, p.username);
-          handleNewProducer(p);
-        });
+        const queued = [...pendingPeers];
         pendingPeers = [];
+        for (const p of queued) {
+          addPeerToUI(p.peerId, p.username);
+          await handleNewProducer(p);
+        }
       }
 
     } catch (err) {
@@ -122,22 +134,6 @@ const Voice = (() => {
       showVoiceError(err.message);
       return;
     }
-
-    // 9. Écouter les nouveaux producers
-    socket.off('ms:newProducer', handleNewProducer);
-    socket.on('ms:newProducer', handleNewProducer);
-
-    // 10. Consommer les producers déjà actifs (screen share en cours, etc.)
-    socket.off('ms:existingProducers');
-    socket.on('ms:existingProducers', (producers) => {
-      producers.forEach(p => handleNewProducer(p));
-    });
-
-    // 10. Consommer les producers déjà actifs (ex: screen share en cours)
-    socket.off('ms:existingProducers');
-    socket.on('ms:existingProducers', (producers) => {
-      producers.forEach(p => handleNewProducer(p));
-    });
 
     updateMuteBtn();
   }
@@ -455,6 +451,95 @@ const Voice = (() => {
   // ═══════════════════════════════════════════════════════════════════════════
   //  UI — PEERS
   // ═══════════════════════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  ANNONCES VOCALES (style TeamSpeak)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  const KEY_ANNOUNCE = 'onkoz_voice_announce';
+
+  function isAnnounceEnabled() {
+    return localStorage.getItem(KEY_ANNOUNCE) !== 'false';
+  }
+
+  const announceQueue = [];
+  let   isAnnouncing  = false;
+
+  function announce(username, action) {
+    if (!isAnnounceEnabled()) return;
+    announceQueue.push({ username, action });
+    if (!isAnnouncing) processAnnounceQueue();
+  }
+
+  function processAnnounceQueue() {
+    if (announceQueue.length === 0) { isAnnouncing = false; return; }
+    isAnnouncing = true;
+    const { username, action } = announceQueue.shift();
+
+    playJoinSound(action === 'join');
+
+    setTimeout(() => {
+      const msg = action === 'join'
+        ? `${username} a rejoint le canal`
+        : `${username} a quitté le canal`;
+
+      if (!window.speechSynthesis) { processAnnounceQueue(); return; }
+
+      window.speechSynthesis.cancel();
+      const utt  = new SpeechSynthesisUtterance(msg);
+      utt.lang   = 'fr-FR';
+      utt.volume = parseFloat(localStorage.getItem('onkoz_announce_volume') || '0.8');
+      utt.rate   = 1.05;
+      utt.pitch  = 1.0;
+
+      const voices  = window.speechSynthesis.getVoices();
+      const frVoice = voices.find(v => v.lang.startsWith('fr')) || null;
+      if (frVoice) utt.voice = frVoice;
+
+      utt.onend   = () => setTimeout(processAnnounceQueue, 200);
+      utt.onerror = () => setTimeout(processAnnounceQueue, 200);
+      window.speechSynthesis.speak(utt);
+    }, 350);
+  }
+
+  function playJoinSound(isJoin) {
+    try {
+      const ctx  = new (window.AudioContext || window.webkitAudioContext)();
+      const vol  = parseFloat(localStorage.getItem('onkoz_announce_volume') || '0.8') * 0.4;
+      const gain = ctx.createGain();
+      gain.gain.value = vol;
+      gain.connect(ctx.destination);
+      if (isJoin) {
+        playNote(ctx, gain, 523.25, 0,    0.12); // Do5
+        playNote(ctx, gain, 659.25, 0.13, 0.12); // Mi5
+      } else {
+        playNote(ctx, gain, 659.25, 0,    0.12); // Mi5
+        playNote(ctx, gain, 523.25, 0.13, 0.12); // Do5
+      }
+      setTimeout(() => ctx.close(), 800);
+    } catch (e) {}
+  }
+
+  function playNote(ctx, dest, freq, startOffset, duration) {
+    const osc = ctx.createOscillator();
+    const env = ctx.createGain();
+    const now = ctx.currentTime + startOffset;
+    osc.type            = 'sine';
+    osc.frequency.value = freq;
+    env.gain.setValueAtTime(0,   now);
+    env.gain.linearRampToValueAtTime(1, now + 0.01);
+    env.gain.linearRampToValueAtTime(0, now + duration);
+    osc.connect(env);
+    env.connect(dest);
+    osc.start(now);
+    osc.stop(now + duration + 0.05);
+  }
+
+  // Précharger les voix dès que possible
+  if (window.speechSynthesis) {
+    window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
+    window.speechSynthesis.getVoices();
+  }
+
   function addPeerToUI(peerId, username) {
     if (document.getElementById(`vp-${peerId}`)) return;
     const container = document.getElementById('voice-peers-container');
@@ -507,10 +592,14 @@ const Voice = (() => {
   // ═══════════════════════════════════════════════════════════════════════════
   function onPeerJoined({ peerId, username }) {
     addPeerToUI(peerId, username);
+    announce(username, 'join');
   }
 
-  function onPeerLeft({ peerId }) {
+  function onPeerLeft({ peerId, username }) {
+    const el   = document.getElementById(`vp-${peerId}`);
+    const name = username || el?.querySelector('span')?.textContent?.trim() || 'Utilisateur';
     removePeerFromUI(peerId);
+    announce(name, 'leave');
   }
 
   function onExistingPeers(peers) {
