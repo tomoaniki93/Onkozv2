@@ -639,7 +639,6 @@ const App = (() => {
     // Panneau vocal sidebar
     document.getElementById('voice-panel-screenshare').addEventListener('click', () => Voice.toggleScreenShare());
     document.getElementById('voice-panel-mute').addEventListener('click',  () => Voice.toggleMute());
-    document.getElementById('voice-panel-leave').addEventListener('click',  () => { Voice.leaveRoom(); hideVoiceBar(); });
     document.getElementById('voice-panel-leave2').addEventListener('click', () => { Voice.leaveRoom(); hideVoiceBar(); });
     document.getElementById('send-btn').addEventListener('click', () => Chat.sendMessage());
     document.getElementById('message-input').addEventListener('keydown', e => { if (e.key === 'Enter') Chat.sendMessage(); });
