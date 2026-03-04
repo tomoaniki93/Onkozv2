@@ -127,6 +127,12 @@ const Voice = (() => {
     socket.off('ms:newProducer', handleNewProducer);
     socket.on('ms:newProducer', handleNewProducer);
 
+    // 10. Consommer les producers déjà actifs (ex: screen share en cours)
+    socket.off('ms:existingProducers');
+    socket.on('ms:existingProducers', (producers) => {
+      producers.forEach(p => handleNewProducer(p));
+    });
+
     updateMuteBtn();
   }
 

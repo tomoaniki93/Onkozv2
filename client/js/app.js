@@ -49,6 +49,9 @@ const App = (() => {
       document.getElementById(`screen-overlay-${peerId}`)?.remove();
       if (username) AudioSettings.showToast(`⏹️ ${username} a arrêté le partage`);
     });
+    socket.on('screen:started', ({ username }) => {
+      AudioSettings.showToast(`🖥️ ${username} partage son écran`);
+    });
     socket.on('voice:peers',       peers => Voice.onExistingPeers(peers));
     socket.on('kicked', () => { alert('Vous avez été expulsé.'); API.clearToken(); location.reload(); });
 
