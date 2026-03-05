@@ -250,6 +250,8 @@ const Voice = (() => {
 
     // Nettoyer les overlays
     destroyOverlay();
+    window.ElectronAPI?.overlayUpdate({ type: 'clear' });
+    window.ElectronAPI?.overlayHide();
     document.querySelectorAll('[id^="screen-overlay-"]').forEach(el => el.remove());
     hideLocalPreview();
 
@@ -300,16 +302,119 @@ const Voice = (() => {
     isSharing ? await stopScreenShare(true) : await startScreenShare();
   }
 
+  // ── Picker de fenêtre pour Electron (remplace getDisplayMedia) ──────────────
+  async function pickElectronScreenSource() {
+    const sources = await window.ElectronAPI.getDesktopSources();
+
+    return new Promise(resolve => {
+      const backdrop = document.createElement('div');
+      backdrop.style.cssText = `
+        position:fixed;inset:0;z-index:10000;
+        background:rgba(0,0,0,0.85);
+        display:flex;align-items:center;justify-content:center;
+        backdrop-filter:blur(6px);
+      `;
+
+      const modal = document.createElement('div');
+      modal.style.cssText = `
+        background:#0D0C18;border:1px solid rgba(255,255,255,0.08);
+        border-radius:14px;padding:20px;width:680px;max-height:75vh;
+        overflow-y:auto;display:flex;flex-direction:column;gap:14px;
+      `;
+
+      const title = document.createElement('h3');
+      title.style.cssText = 'color:#EBE9F5;font-size:1rem;font-weight:600;margin:0;';
+      title.textContent = '🖥️ Choisir une fenêtre à partager';
+
+      // Séparation écrans / fenêtres
+      const screens  = sources.filter(s => s.id.startsWith('screen'));
+      const windows  = sources.filter(s => s.id.startsWith('window'));
+
+      const grid = document.createElement('div');
+      grid.style.cssText = 'display:grid;grid-template-columns:repeat(3,1fr);gap:10px;';
+
+      const renderGroup = (label, items) => {
+        if (!items.length) return;
+        const lbl = document.createElement('div');
+        lbl.style.cssText = 'grid-column:1/-1;font-size:0.68rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#5A5474;padding-top:4px;';
+        lbl.textContent = label;
+        grid.appendChild(lbl);
+
+        items.forEach(src => {
+          const card = document.createElement('button');
+          card.style.cssText = `
+            background:#111020;border:1px solid rgba(255,255,255,0.06);
+            border-radius:8px;padding:8px;cursor:pointer;
+            display:flex;flex-direction:column;align-items:center;gap:6px;
+            transition:border-color 0.15s,background 0.15s;text-align:center;
+          `;
+          card.onmouseover = () => card.style.borderColor = '#7B5CE5';
+          card.onmouseleave = () => card.style.borderColor = 'rgba(255,255,255,0.06)';
+
+          const thumb = document.createElement('img');
+          thumb.src = src.thumbnail;
+          thumb.style.cssText = 'width:100%;border-radius:4px;object-fit:cover;max-height:90px;';
+
+          const name = document.createElement('span');
+          name.style.cssText = 'font-size:0.7rem;color:#A89FC8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:100%;';
+          name.textContent = src.name;
+
+          card.append(thumb, name);
+          card.addEventListener('click', () => {
+            backdrop.remove();
+            resolve(src.id);
+          });
+          grid.appendChild(card);
+        });
+      };
+
+      renderGroup('Écrans', screens);
+      renderGroup('Fenêtres', windows);
+
+      const cancelBtn = document.createElement('button');
+      cancelBtn.style.cssText = `
+        align-self:flex-end;padding:6px 16px;border-radius:6px;
+        background:transparent;border:1px solid rgba(255,255,255,0.1);
+        color:#A89FC8;cursor:pointer;font-size:0.82rem;transition:background 0.15s;
+      `;
+      cancelBtn.textContent = 'Annuler';
+      cancelBtn.onclick = () => { backdrop.remove(); resolve(null); };
+
+      modal.append(title, grid, cancelBtn);
+      backdrop.appendChild(modal);
+      document.body.appendChild(backdrop);
+    });
+  }
+
   async function startScreenShare() {
     if (!currentRoomId || !sendTransport) {
       AudioSettings.showToast('⚠️ Rejoins d\'abord un salon vocal');
       return;
     }
     try {
-      screenStream = await navigator.mediaDevices.getDisplayMedia({
-        video: { frameRate: 30, width: { ideal: 1920 }, height: { ideal: 1080 } },
-        audio: false,
-      });
+      // Electron : utiliser desktopCapturer avec picker custom
+      if (window.ElectronAPI?.isElectron) {
+        const sourceId = await pickElectronScreenSource();
+        if (!sourceId) return; // annulé
+        screenStream = await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: {
+            mandatory: {
+              chromeMediaSource:   'desktop',
+              chromeMediaSourceId: sourceId,
+              maxWidth:  1920,
+              maxHeight: 1080,
+              maxFrameRate: 30,
+            },
+          },
+        });
+      } else {
+        // Navigateur standard
+        screenStream = await navigator.mediaDevices.getDisplayMedia({
+          video: { frameRate: 30, width: { ideal: 1920 }, height: { ideal: 1080 } },
+          audio: false,
+        });
+      }
 
       const videoTrack = screenStream.getVideoTracks()[0];
 
@@ -757,6 +862,7 @@ const Voice = (() => {
         const isTalking = avg > SPEAK_THRESHOLD && !isMuted;
         setSpeaking('vp-self', isTalking);
         updateOverlaySpeaking('self', isTalking);
+        window.ElectronAPI?.overlayUpdate({ type: 'speaking', peerId: 'self', speaking: isTalking });
       }
       loop();
     } catch(e) {}
@@ -789,6 +895,7 @@ const Voice = (() => {
         const isTalking = avg > SPEAK_THRESHOLD;
         setSpeaking(`vp-${peerId}`, isTalking);
         updateOverlaySpeaking(peerId, isTalking);
+        window.ElectronAPI?.overlayUpdate({ type: 'speaking', peerId, speaking: isTalking });
       }
       const rafId = requestAnimationFrame(loop);
       speakingAnalysers.set(peerId, { analyser, ctx, source, rafId });
@@ -829,12 +936,14 @@ const Voice = (() => {
       <span class="text-[0.8rem] text-onkoz-text-md text-center">${username}</span>`;
     container.appendChild(peer);
     overlayAddMember(peerId, username);
+    window.ElectronAPI?.overlayUpdate({ type: 'add', peerId, username });
   }
 
   function removePeerFromUI(peerId) {
     document.getElementById(`vp-${peerId}`)?.remove();
     stopPeerSpeakingDetection(peerId);
     overlayRemoveMember(peerId);
+    window.ElectronAPI?.overlayUpdate({ type: 'remove', peerId });
     consumers.get(peerId)?.close();
     consumers.delete(peerId);
     // Fermer l'overlay de partage d'écran si ce pair partageait
@@ -858,6 +967,7 @@ const Voice = (() => {
     // Initialiser l'overlay avec soi-même
     overlayMembers.clear();
     overlayMembers.set('self', { username: user.username + ' (moi)', speaking: false });
+    window.ElectronAPI?.overlayUpdate({ type: 'add', peerId: 'self', username: user.username + ' (moi)' });
     if (overlayVisible) renderOverlayMembers();
   }
 
@@ -912,7 +1022,13 @@ const Voice = (() => {
     onPeerLeft,
     onExistingPeers,
     getCurrentRoomId: () => currentRoomId,
-    toggleOverlay: () => overlayVisible ? hideOverlay() : showOverlay(),
+    toggleOverlay: () => {
+      if (window.ElectronAPI?.isElectron) {
+        window.ElectronAPI.overlayToggle();
+      } else {
+        overlayVisible ? hideOverlay() : showOverlay();
+      }
+    },
     showOverlay,
     hideOverlay,
   };
