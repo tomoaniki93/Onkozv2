@@ -640,6 +640,7 @@ const App = (() => {
     document.getElementById('voice-panel-screenshare').addEventListener('click', () => Voice.toggleScreenShare());
     document.getElementById('voice-panel-mute').addEventListener('click',  () => Voice.toggleMute());
     document.getElementById('voice-panel-leave2').addEventListener('click', () => { Voice.leaveRoom(); hideVoiceBar(); });
+    document.getElementById('voice-panel-overlay')?.addEventListener('click', () => Voice.toggleOverlay());
     document.getElementById('send-btn').addEventListener('click', () => Chat.sendMessage());
     document.getElementById('message-input').addEventListener('keydown', e => { if (e.key === 'Enter') Chat.sendMessage(); });
     document.getElementById('dm-send-btn').addEventListener('click', () => Chat.sendDM());
@@ -663,6 +664,7 @@ const App = (() => {
     }, { passive: true });
     document.addEventListener('keydown', e => {
       if (e.key === 'Escape') { closeSidebar(); closeMobileMembers(); }
+      if (e.key === 'v' && e.altKey) { e.preventDefault(); Voice.toggleOverlay(); }
     });
   }
 

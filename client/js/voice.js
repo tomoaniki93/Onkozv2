@@ -28,6 +28,12 @@ const Voice = (() => {
 
   // ── Partage d'écran ─────────────────────────────────────────────────────────
   let screenProducer  = null;
+
+  // ── Speaking detection ───────────────────────────────────────────────────
+  let speakingAnalysers = new Map(); // peerId → { analyser, source, rafId }
+  let selfAnalyser      = null;      // AnalyserNode sur le micro local
+  let selfRafId         = null;
+  const SPEAK_THRESHOLD = 12;        // 0–255, sensibilité voyant
   let screenStream    = null;
   let isSharing       = false;
   let screenConsumers = new Map(); // peerId → consumer vidéo
@@ -104,14 +110,17 @@ const Voice = (() => {
       producer = await sendTransport.produce({
         track: processedStream.getAudioTracks()[0],
         codecOptions: {
-          opusStereo:          false,  // voix mono (économise ~50% bande passante)
-          opusDtx:             true,   // silence = 0 paquets (-40% bande passante)
-          opusFec:             true,   // correction d'erreurs forward (réseau instable)
-          opusMaxPlaybackRate: 48000,  // qualité maximale 48 kHz
-          opusPtime:           20,     // taille paquet 20ms (standard WebRTC)
+          opusStereo:          false,
+          opusDtx:             true,
+          opusFec:             true,
+          opusMaxPlaybackRate: 48000,
+          opusPtime:           20,
         },
-        encodings: [{ maxBitrate: 64_000 }], // 64 kbps — qualité optimale voix
+        encodings: [{ maxBitrate: 64_000 }],
       });
+
+      // Démarrer la détection speaking sur le micro local
+      startSelfSpeakingDetection(processedStream);
 
       // 7. Transport de réception
       const recvParams = await socketEmit('ms:createTransport', { roomId });
@@ -176,6 +185,8 @@ const Voice = (() => {
         audio.volume = vol;
         audio.play().catch(console.warn);
         addPeerToUI(peerId, username);
+        // Démarrer la détection speaking sur ce pair
+        startPeerSpeakingDetection(peerId, consumer.track);
       }
     } catch (err) {
       console.error('[Voice] consume :', err);
@@ -220,6 +231,11 @@ const Voice = (() => {
       NoiseReducer.dispose();
     }
 
+    // Stopper toutes les détections speaking
+    stopSelfSpeakingDetection();
+    speakingAnalysers.forEach((_, pid) => stopPeerSpeakingDetection(pid));
+    speakingAnalysers.clear();
+
     // Fermer tous les consumers
     consumers.forEach(c => c.close());
     screenConsumers.forEach(c => c.close());
@@ -233,6 +249,7 @@ const Voice = (() => {
     pendingPeers = [];
 
     // Nettoyer les overlays
+    destroyOverlay();
     document.querySelectorAll('[id^="screen-overlay-"]').forEach(el => el.remove());
     hideLocalPreview();
 
@@ -547,6 +564,258 @@ const Voice = (() => {
     window.speechSynthesis.getVoices();
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  OVERLAY IN-GAME (milieu-gauche, draggable)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // Données membres overlay : peerId → { username, speaking }
+  const overlayMembers = new Map();
+  let overlayEl        = null;
+  let overlayVisible   = false;
+
+  function createOverlay() {
+    if (document.getElementById('voice-overlay')) return;
+
+    overlayEl = document.createElement('div');
+    overlayEl.id = 'voice-overlay';
+    overlayEl.style.cssText = `
+      position: fixed;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      z-index: 9999;
+      display: none;
+      flex-direction: column;
+      gap: 4px;
+      min-width: 160px;
+      max-width: 220px;
+      background: rgba(8, 7, 16, 0.72);
+      border: 1px solid rgba(255,255,255,0.07);
+      border-radius: 10px;
+      padding: 8px 6px;
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+      user-select: none;
+      cursor: grab;
+      font-family: 'DM Sans', system-ui, sans-serif;
+    `;
+
+    // Header draggable
+    const header = document.createElement('div');
+    header.style.cssText = `
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 4px 6px; margin-bottom: 2px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    `;
+    header.innerHTML = `
+      <span style="font-size:0.65rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#5A5474;">Vocal</span>
+      <button id="voice-overlay-close" style="background:none;border:none;color:#5A5474;cursor:pointer;font-size:12px;padding:0;line-height:1;" title="Masquer l'overlay">✕</button>
+    `;
+    overlayEl.appendChild(header);
+
+    // Conteneur membres
+    const membersEl = document.createElement('div');
+    membersEl.id = 'voice-overlay-members';
+    membersEl.style.cssText = 'display:flex;flex-direction:column;gap:3px;';
+    overlayEl.appendChild(membersEl);
+
+    document.body.appendChild(overlayEl);
+
+    // Fermer
+    document.getElementById('voice-overlay-close').addEventListener('click', e => {
+      e.stopPropagation();
+      hideOverlay();
+    });
+
+    // Drag
+    let dragging = false, dx = 0, dy = 0;
+    overlayEl.addEventListener('mousedown', e => {
+      if (e.target.id === 'voice-overlay-close') return;
+      dragging = true;
+      dx = e.clientX - overlayEl.getBoundingClientRect().left;
+      dy = e.clientY - overlayEl.getBoundingClientRect().top;
+      overlayEl.style.cursor = 'grabbing';
+      overlayEl.style.transform = 'none';
+    });
+    document.addEventListener('mousemove', e => {
+      if (!dragging) return;
+      overlayEl.style.left = `${Math.max(0, Math.min(e.clientX - dx, window.innerWidth - overlayEl.offsetWidth))}px`;
+      overlayEl.style.top  = `${Math.max(0, Math.min(e.clientY - dy, window.innerHeight - overlayEl.offsetHeight))}px`;
+    });
+    document.addEventListener('mouseup', () => {
+      dragging = false;
+      overlayEl.style.cursor = 'grab';
+    });
+  }
+
+  function showOverlay() {
+    if (!overlayEl) createOverlay();
+    overlayEl.style.display = 'flex';
+    overlayVisible = true;
+    renderOverlayMembers();
+  }
+
+  function hideOverlay() {
+    if (overlayEl) overlayEl.style.display = 'none';
+    overlayVisible = false;
+  }
+
+  function destroyOverlay() {
+    overlayEl?.remove();
+    overlayEl = null;
+    overlayVisible = false;
+    overlayMembers.clear();
+  }
+
+  function renderOverlayMembers() {
+    const container = document.getElementById('voice-overlay-members');
+    if (!container) return;
+    container.innerHTML = '';
+    overlayMembers.forEach(({ username, speaking }, peerId) => {
+      container.appendChild(buildOverlayRow(peerId, username, speaking));
+    });
+  }
+
+  function buildOverlayRow(peerId, username, speaking) {
+    const row = document.createElement('div');
+    row.id = `ov-row-${peerId}`;
+    row.style.cssText = `
+      display: flex; align-items: center; gap: 7px;
+      padding: 3px 4px; border-radius: 6px;
+      transition: background 0.1s;
+      background: ${speaking ? 'rgba(123,92,229,0.12)' : 'transparent'};
+    `;
+
+    // Voyant
+    const dot = document.createElement('div');
+    dot.style.cssText = `
+      width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+      background: ${speaking ? '#FF5252' : '#302D45'};
+      box-shadow: ${speaking ? '0 0 6px #FF5252' : 'none'};
+      transition: background 0.1s, box-shadow 0.1s;
+    `;
+
+    // Nom
+    const name = document.createElement('span');
+    name.style.cssText = `
+      font-size: 0.78rem; font-weight: 500;
+      color: ${speaking ? '#EBE9F5' : '#A89FC8'};
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      transition: color 0.1s;
+    `;
+    name.textContent = username;
+
+    row.append(dot, name);
+    return row;
+  }
+
+  function updateOverlaySpeaking(peerId, speaking) {
+    if (!overlayEl || !overlayVisible) return;
+    const row = document.getElementById(`ov-row-${peerId}`);
+    if (!row) return;
+    const dot  = row.querySelector('div');
+    const name = row.querySelector('span');
+    row.style.background  = speaking ? 'rgba(123,92,229,0.12)' : 'transparent';
+    dot.style.background  = speaking ? '#FF5252' : '#302D45';
+    dot.style.boxShadow   = speaking ? '0 0 6px #FF5252' : 'none';
+    name.style.color      = speaking ? '#EBE9F5' : '#A89FC8';
+    // Remonter les speakers en haut
+    if (speaking) row.parentElement?.prepend(row);
+  }
+
+  // Ajouter/retirer un membre de l'overlay en sync avec les peers
+  function overlayAddMember(peerId, username) {
+    overlayMembers.set(peerId, { username, speaking: false });
+    if (overlayVisible) renderOverlayMembers();
+  }
+  function overlayRemoveMember(peerId) {
+    overlayMembers.delete(peerId);
+    document.getElementById(`ov-row-${peerId}`)?.remove();
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  SPEAKING DETECTION
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  function startSelfSpeakingDetection(stream) {
+    try {
+      const ctx      = new (window.AudioContext || window.webkitAudioContext)();
+      const source   = ctx.createMediaStreamSource(stream);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 256;
+      analyser.smoothingTimeConstant = 0.4;
+      source.connect(analyser);
+      const data = new Uint8Array(analyser.frequencyBinCount);
+
+      selfAnalyser = { analyser, ctx };
+
+      function loop() {
+        selfRafId = requestAnimationFrame(loop);
+        analyser.getByteFrequencyData(data);
+        const avg     = data.slice(2, 14).reduce((a, b) => a + b, 0) / 12;
+        const isTalking = avg > SPEAK_THRESHOLD && !isMuted;
+        setSpeaking('vp-self', isTalking);
+        updateOverlaySpeaking('self', isTalking);
+      }
+      loop();
+    } catch(e) {}
+  }
+
+  function stopSelfSpeakingDetection() {
+    if (selfRafId) cancelAnimationFrame(selfRafId);
+    selfRafId = null;
+    try { selfAnalyser?.ctx?.close(); } catch(e) {}
+    selfAnalyser = null;
+    setSpeaking('vp-self', false);
+  }
+
+  function startPeerSpeakingDetection(peerId, track) {
+    try {
+      const stream   = new MediaStream([track]);
+      const ctx      = new (window.AudioContext || window.webkitAudioContext)();
+      const source   = ctx.createMediaStreamSource(stream);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 256;
+      analyser.smoothingTimeConstant = 0.4;
+      source.connect(analyser);
+      const data  = new Uint8Array(analyser.frequencyBinCount);
+
+      function loop() {
+        const rafId = requestAnimationFrame(loop);
+        speakingAnalysers.get(peerId) && (speakingAnalysers.get(peerId).rafId = rafId);
+        analyser.getByteFrequencyData(data);
+        const avg       = data.slice(2, 14).reduce((a, b) => a + b, 0) / 12;
+        const isTalking = avg > SPEAK_THRESHOLD;
+        setSpeaking(`vp-${peerId}`, isTalking);
+        updateOverlaySpeaking(peerId, isTalking);
+      }
+      const rafId = requestAnimationFrame(loop);
+      speakingAnalysers.set(peerId, { analyser, ctx, source, rafId });
+    } catch(e) {}
+  }
+
+  function stopPeerSpeakingDetection(peerId) {
+    const entry = speakingAnalysers.get(peerId);
+    if (!entry) return;
+    cancelAnimationFrame(entry.rafId);
+    try { entry.ctx?.close(); } catch(e) {}
+    speakingAnalysers.delete(peerId);
+    setSpeaking(`vp-${peerId}`, false);
+  }
+
+  function setSpeaking(elemId, speaking) {
+    const el = document.getElementById(elemId);
+    if (!el) return;
+    const avatar = el.querySelector('.rounded-full');
+    if (!avatar) return;
+    if (speaking) {
+      avatar.classList.add('ring-2', 'ring-onkoz-danger', 'ring-offset-1', 'ring-offset-onkoz-surface');
+    } else {
+      avatar.classList.remove('ring-2', 'ring-onkoz-danger', 'ring-offset-1', 'ring-offset-onkoz-surface');
+    }
+  }
+
   function addPeerToUI(peerId, username) {
     if (document.getElementById(`vp-${peerId}`)) return;
     const container = document.getElementById('voice-peers-container');
@@ -559,10 +828,13 @@ const Voice = (() => {
       <div class="${UI.avatarClass(username)} w-12 h-12 rounded-full flex items-center justify-center text-xl font-bold text-white uppercase">${username[0]}</div>
       <span class="text-[0.8rem] text-onkoz-text-md text-center">${username}</span>`;
     container.appendChild(peer);
+    overlayAddMember(peerId, username);
   }
 
   function removePeerFromUI(peerId) {
     document.getElementById(`vp-${peerId}`)?.remove();
+    stopPeerSpeakingDetection(peerId);
+    overlayRemoveMember(peerId);
     consumers.get(peerId)?.close();
     consumers.delete(peerId);
     // Fermer l'overlay de partage d'écran si ce pair partageait
@@ -583,6 +855,11 @@ const Voice = (() => {
           </div>
         </div>
       </div>`;
+    // Initialiser l'overlay avec soi-même
+    const user = Auth.getUser();
+    overlayMembers.clear();
+    overlayMembers.set('self', { username: user.username + ' (moi)', speaking: false });
+    if (overlayVisible) renderOverlayMembers();
   }
 
   function showVoiceError(msg) {
@@ -636,6 +913,9 @@ const Voice = (() => {
     onPeerLeft,
     onExistingPeers,
     getCurrentRoomId: () => currentRoomId,
+    toggleOverlay: () => overlayVisible ? hideOverlay() : showOverlay(),
+    showOverlay,
+    hideOverlay,
   };
 
 })();
