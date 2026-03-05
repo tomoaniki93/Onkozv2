@@ -856,7 +856,6 @@ const Voice = (() => {
         </div>
       </div>`;
     // Initialiser l'overlay avec soi-même
-    const user = Auth.getUser();
     overlayMembers.clear();
     overlayMembers.set('self', { username: user.username + ' (moi)', speaking: false });
     if (overlayVisible) renderOverlayMembers();
