@@ -13,6 +13,16 @@ const MEDIA_CODECS = [
     mimeType: 'audio/opus',
     clockRate: 48000,
     channels: 2,
+    parameters: {
+      'minptime':     10,    // latence minimale 10ms
+      'useinbandfec': 1,     // active FEC inband (reconstruction paquets perdus)
+      'usedtx':       1,     // active DTX côté serveur
+      'stereo':       0,     // mono pour la voix
+      'maxaveragebitrate': 64000, // plafond 64 kbps
+    },
+    rtcpFeedback: [
+      { type: 'transport-cc' }, // contrôle de congestion (adapte le bitrate au réseau)
+    ],
   },
   {
     kind: 'video',

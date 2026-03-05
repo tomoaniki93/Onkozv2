@@ -103,7 +103,14 @@ const Voice = (() => {
       // 6. Envoyer la piste TRAITÉE (jamais le stream brut)
       producer = await sendTransport.produce({
         track: processedStream.getAudioTracks()[0],
-        codecOptions: { opusStereo: false, opusDtx: true },
+        codecOptions: {
+          opusStereo:          false,  // voix mono (économise ~50% bande passante)
+          opusDtx:             true,   // silence = 0 paquets (-40% bande passante)
+          opusFec:             true,   // correction d'erreurs forward (réseau instable)
+          opusMaxPlaybackRate: 48000,  // qualité maximale 48 kHz
+          opusPtime:           20,     // taille paquet 20ms (standard WebRTC)
+        },
+        encodings: [{ maxBitrate: 64_000 }], // 64 kbps — qualité optimale voix
       });
 
       // 7. Transport de réception
