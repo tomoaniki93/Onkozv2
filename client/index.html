@@ -145,13 +145,41 @@
 
     <!-- Register -->
     <div id="register-form" class="hidden flex-col gap-3">
-      <div class="bg-onkoz-user/10 border border-onkoz-user/30 rounded-lg px-3 py-2.5 text-onkoz-user text-sm">
+
+      <!-- Toggle compte éphémère -->
+      <div id="ephemeral-toggle-wrap" class="flex items-center justify-between bg-onkoz-elevated border border-onkoz-border rounded-lg px-3 py-2.5 cursor-pointer select-none"
+           onclick="document.getElementById('ephemeral-check').click()">
+        <div class="flex flex-col gap-0.5">
+          <span class="text-sm font-semibold text-onkoz-text">⏳ Compte éphémère</span>
+          <span class="text-xs text-onkoz-text-muted">Accès 24h, sans mot de passe</span>
+        </div>
+        <div class="relative">
+          <input id="ephemeral-check" type="checkbox" class="sr-only" />
+          <div id="ephemeral-track" class="w-10 h-5 rounded-full bg-onkoz-border transition-colors duration-200"></div>
+          <div id="ephemeral-knob" class="absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform duration-200"></div>
+        </div>
+      </div>
+
+      <!-- Infos compte éphémère -->
+      <div id="ephemeral-info" class="hidden bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2.5 text-amber-400 text-xs leading-relaxed">
+        ⏳ Ce compte sera <strong>automatiquement supprimé</strong> après 24h.<br>
+        Tu pourras le rendre permanent depuis ton profil en définissant un mot de passe.
+      </div>
+
+      <!-- Info compte permanent -->
+      <div id="permanent-info" class="bg-onkoz-user/10 border border-onkoz-user/30 rounded-lg px-3 py-2.5 text-onkoz-user text-sm">
         ⚠️ Ton pseudo est <strong>définitif</strong> et ne pourra pas être changé.
       </div>
-      <input id="reg-username" type="text" maxlength="20" placeholder="Choisis ton pseudo (définitif)" autocomplete="username"
+
+      <input id="reg-username" type="text" maxlength="20" placeholder="Choisis ton pseudo" autocomplete="username"
              class="bg-onkoz-elevated border border-onkoz-border rounded-lg px-3 py-2.5 outline-none focus:border-onkoz-accent transition-colors" />
-      <input id="reg-password" type="password" placeholder="Mot de passe (min 6 caractères)" autocomplete="new-password"
-             class="bg-onkoz-elevated border border-onkoz-border rounded-lg px-3 py-2.5 outline-none focus:border-onkoz-accent transition-colors" />
+
+      <!-- Mot de passe (masqué en mode éphémère) -->
+      <div id="reg-password-wrap" class="flex flex-col gap-3">
+        <input id="reg-password" type="password" placeholder="Mot de passe (min 6 caractères)" autocomplete="new-password"
+               class="bg-onkoz-elevated border border-onkoz-border rounded-lg px-3 py-2.5 outline-none focus:border-onkoz-accent transition-colors" />
+      </div>
+
       <button id="register-btn" class="bg-onkoz-accent hover:bg-onkoz-accent-dk text-white font-semibold py-2.5 rounded-lg transition-colors">Créer mon compte</button>
     </div>
 

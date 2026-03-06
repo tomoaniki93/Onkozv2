@@ -20,6 +20,17 @@ function getDb() {
   const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
   db.exec(schema);
 
+  // Migration runtime : colonnes éphémères (DB existantes sans ces colonnes)
+  const userCols = db.pragma('table_info(users)').map(c => c.name);
+  if (!userCols.includes('is_ephemeral')) {
+    db.exec('ALTER TABLE users ADD COLUMN is_ephemeral INTEGER NOT NULL DEFAULT 0');
+    console.log('[DB] Migration : is_ephemeral ajouté');
+  }
+  if (!userCols.includes('expires_at')) {
+    db.exec('ALTER TABLE users ADD COLUMN expires_at INTEGER DEFAULT NULL');
+    console.log('[DB] Migration : expires_at ajouté');
+  }
+
   // Créer le compte admin par défaut s'il n'existe pas
   ensureAdmin(db);
 
@@ -37,7 +48,15 @@ function ensureAdmin(db) {
 
 // Nettoyer les messages > 7 jours (DMs + salons texte, appelé au démarrage et toutes les heures)
 function cleanOldDMs(db) {
-  const cutoff = Math.floor(Date.now() / 1000) - 7 * 24 * 3600;
+  // Supprimer les comptes éphémères expirés
+  const now = Math.floor(Date.now() / 1000);
+  const expiredResult = db.prepare(
+    'DELETE FROM users WHERE is_ephemeral = 1 AND expires_at IS NOT NULL AND expires_at < ?'
+  ).run(now);
+  if (expiredResult.changes > 0)
+    console.log(`[DB] Comptes éphémères expirés supprimés : ${expiredResult.changes}`);
+
+  const cutoff = now - 7 * 24 * 3600;
 
   const dmResult = db.prepare('DELETE FROM direct_messages WHERE created_at < ?').run(cutoff);
   if (dmResult.changes > 0)

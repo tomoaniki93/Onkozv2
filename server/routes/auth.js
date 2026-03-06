@@ -108,4 +108,58 @@ router.get('/me', requireAuth, (req, res) => {
   res.json(user);
 });
 
+
+// ── Inscription éphémère (compte 24h, sans mot de passe) ─────────────────────
+router.post('/register-guest', rateLimitAuth, (req, res) => {
+  const db = getDb();
+  const { username } = req.body;
+
+  if (!username) return res.status(400).json({ error: 'Pseudo requis' });
+  if (username.length < 2 || username.length > 20) return res.status(400).json({ error: 'Pseudo 2-20 caractères' });
+  if (!/^[a-zA-Z0-9_-]+$/.test(username)) return res.status(400).json({ error: 'Pseudo : lettres, chiffres, _ et - uniquement' });
+
+  const exists = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
+  if (exists) return res.status(409).json({ error: 'Ce pseudo est déjà pris' });
+
+  const expiresAt = Math.floor(Date.now() / 1000) + 24 * 3600; // +24h
+  // Mot de passe aléatoire inaccessible (l'utilisateur ne peut pas se connecter avec)
+  const randomPwd = require('crypto').randomBytes(32).toString('hex');
+  const hash = bcrypt.hashSync(randomPwd, 10);
+
+  const info = db.prepare(
+    'INSERT INTO users (username, password, role, is_ephemeral, expires_at) VALUES (?, ?, ?, 1, ?)'
+  ).run(username, hash, 'temporary', expiresAt);
+
+  const token = signToken({ id: info.lastInsertRowid, username, role: 'temporary' });
+  res.status(201).json({
+    token,
+    user: { id: info.lastInsertRowid, username, role: 'temporary', is_ephemeral: 1, expires_at: expiresAt },
+  });
+});
+
+// ── Définir un mot de passe (temporary → user permanent) ─────────────────────
+router.post('/set-password', requireAuth, (req, res) => {
+  const db  = getDb();
+  const uid = req.user.id;
+
+  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(uid);
+  if (!user) return res.status(404).json({ error: 'Utilisateur introuvable' });
+  if (!user.is_ephemeral) return res.status(400).json({ error: 'Ce compte a déjà un mot de passe' });
+
+  const { password } = req.body;
+  if (!password || password.length < 6) return res.status(400).json({ error: 'Mot de passe min 6 caractères' });
+
+  const hash = bcrypt.hashSync(password, 12);
+  db.prepare(
+    "UPDATE users SET password = ?, role = 'user', is_ephemeral = 0, expires_at = NULL WHERE id = ?"
+  ).run(hash, uid);
+
+  // Nouveau token avec rôle mis à jour
+  const token = signToken({ id: uid, username: user.username, role: 'user' });
+  res.json({
+    token,
+    user: { id: uid, username: user.username, role: 'user', is_ephemeral: 0, expires_at: null },
+  });
+});
+
 module.exports = router;

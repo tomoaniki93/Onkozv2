@@ -8,14 +8,14 @@ const router = express.Router();
 // ── Liste des utilisateurs ────────────────────────────────────────────────────
 router.get('/', requireAuth, (req, res) => {
   const db    = getDb();
-  const users = db.prepare('SELECT id, username, role, last_seen, bio, status, avatar_url, banner_url FROM users ORDER BY username').all();
+  const users = db.prepare('SELECT id, username, role, last_seen, bio, status, avatar_url, banner_url, is_ephemeral, expires_at FROM users ORDER BY username').all();
   res.json(users);
 });
 
 // ── Profil d'un utilisateur ───────────────────────────────────────────────────
 router.get('/:id/profile', requireAuth, (req, res) => {
   const db   = getDb();
-  const user = db.prepare('SELECT id, username, role, last_seen, bio, status, avatar_url, banner_url, created_at FROM users WHERE id = ?').get(req.params.id);
+  const user = db.prepare('SELECT id, username, role, last_seen, bio, status, avatar_url, banner_url, created_at, is_ephemeral, expires_at FROM users WHERE id = ?').get(req.params.id);
   if (!user) return res.status(404).json({ error: 'Utilisateur introuvable' });
   res.json(user);
 });
@@ -46,6 +46,9 @@ router.patch('/:id/role', requireAuth, requireRole('admin'), (req, res) => {
   const db   = getDb();
   const { role } = req.body;
   if (!['admin', 'moderator', 'user'].includes(role)) return res.status(400).json({ error: 'Rôle invalide' });
+  // Un compte temporaire doit définir son mot de passe pour changer de rôle
+  const targetUser = db.prepare('SELECT is_ephemeral FROM users WHERE id = ?').get(req.params.id);
+  if (targetUser?.is_ephemeral) return res.status(400).json({ error: 'Ce compte doit d\'abord définir un mot de passe (/api/auth/set-password)' });
   if (req.params.id == req.user.id) return res.status(400).json({ error: 'Impossible de changer son propre rôle' });
   const user = db.prepare('SELECT id FROM users WHERE id = ?').get(req.params.id);
   if (!user) return res.status(404).json({ error: 'Utilisateur introuvable' });

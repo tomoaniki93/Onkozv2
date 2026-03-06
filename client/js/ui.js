@@ -35,7 +35,8 @@ const UI = (() => {
     const span = document.createElement('span');
     span.className = 'role-badge';
     span.classList.add(role);
-    span.textContent = role === 'admin' ? 'Admin' : role === 'moderator' ? 'Mod' : 'User';
+    const labels = { admin: 'Admin', moderator: 'Mod', user: 'User', temporary: '⏳ Temp' };
+    span.textContent = labels[role] || 'User';
     return span;
   }
 
@@ -191,6 +192,19 @@ const UI = (() => {
       info.appendChild(st);
     }
 
+    // Badge expiration pour les comptes temporaires
+    if (u.role === 'temporary' && u.expires_at) {
+      const diff = u.expires_at - Math.floor(Date.now() / 1000);
+      if (diff > 0) {
+        const h   = Math.floor(diff / 3600);
+        const m   = Math.floor((diff % 3600) / 60);
+        const exp = document.createElement('p');
+        exp.className = 'text-[0.65rem] text-amber-400/70 truncate';
+        exp.textContent = `⏳ Expire dans ${h}h${String(m).padStart(2,'0')}`;
+        info.appendChild(exp);
+      }
+    }
+
     li.append(av, info);
 
     // Bouton options admin
@@ -243,14 +257,16 @@ const UI = (() => {
 
     const items = [];
 
-    // Rôles
-    if (u.role !== 'admin') {
+    // Rôles (pas de changement de rôle pour les comptes temporaires)
+    if (u.role !== 'admin' && u.role !== 'temporary') {
       if (u.role !== 'moderator') {
         items.push({ icon: '🛡', label: 'Passer Modérateur', action: () => App.changeRole(u.id, 'moderator') });
       } else {
         items.push({ icon: '👤', label: 'Passer Utilisateur', action: () => App.changeRole(u.id, 'user') });
       }
       items.push({ icon: '👑', label: 'Passer Admin', action: () => App.changeRole(u.id, 'admin') });
+    } else if (u.role === 'temporary') {
+      items.push({ icon: '⏳', label: 'Compte temporaire', action: () => AudioSettings.showToast("ℹ️ Ce compte doit d'abord définir un mot de passe"), danger: false });
     }
 
     // Séparateur + kick
@@ -289,7 +305,8 @@ const UI = (() => {
     const roleEl = document.getElementById('footer-role');
     roleEl.className = 'role-badge';
     roleEl.classList.add(user.role);
-    roleEl.textContent = user.role === 'admin' ? 'Admin' : user.role === 'moderator' ? 'Modérateur' : 'Utilisateur';
+    const roleNames = { admin: 'Admin', moderator: 'Modérateur', user: 'Utilisateur', temporary: '⏳ Temporaire' };
+    roleEl.textContent = roleNames[user.role] || 'Utilisateur';
 
     const av = document.getElementById('footer-avatar');
     av.textContent = user.username[0].toUpperCase();

@@ -7,6 +7,8 @@ const Auth = (() => {
   function getUser()    { return currentUser; }
   function isAdmin()    { return currentUser?.role === 'admin'; }
   function isMod()      { return ['admin','moderator'].includes(currentUser?.role); }
+  function isTemp()     { return currentUser?.role === 'temporary'; }
+  function getExpiry()  { return currentUser?.expires_at || null; }
 
   async function init() {
     const token = API.getToken();
@@ -112,12 +114,38 @@ const Auth = (() => {
       });
     });
 
+    // Toggle éphémère
+    const ephCheck = document.getElementById('ephemeral-check');
+    const ephTrack = document.getElementById('ephemeral-track');
+    const ephKnob  = document.getElementById('ephemeral-knob');
+    const ephInfo  = document.getElementById('ephemeral-info');
+    const permInfo = document.getElementById('permanent-info');
+    const pwdWrap  = document.getElementById('reg-password-wrap');
+    const regBtn   = document.getElementById('register-btn');
+
+    ephCheck?.addEventListener('change', () => {
+      const on = ephCheck.checked;
+      ephTrack.style.background   = on ? 'var(--color-onkoz-accent, #7c5cbf)' : '';
+      ephTrack.className          = `w-10 h-5 rounded-full transition-colors duration-200 ${on ? 'bg-onkoz-accent' : 'bg-onkoz-border'}`;
+      ephKnob.style.transform     = on ? 'translateX(20px)' : '';
+      ephInfo.classList.toggle('hidden', !on);
+      permInfo.classList.toggle('hidden', on);
+      pwdWrap.classList.toggle('hidden', on);
+      regBtn.textContent = on ? '⏳ Rejoindre pour 24h' : 'Créer mon compte';
+    });
+
     // Register
     document.getElementById('register-btn').addEventListener('click', async () => {
-      const u = document.getElementById('reg-username').value.trim();
-      const p = document.getElementById('reg-password').value;
+      const u        = document.getElementById('reg-username').value.trim();
+      const isEphemeral = document.getElementById('ephemeral-check')?.checked;
       try {
-        const { token, user } = await API.register(u, p);
+        let token, user;
+        if (isEphemeral) {
+          ({ token, user } = await API.registerGuest(u));
+        } else {
+          const p = document.getElementById('reg-password').value;
+          ({ token, user } = await API.register(u, p));
+        }
         API.setToken(token);
         currentUser = user;
         localStorage.setItem('onkoz_user', JSON.stringify(user));
@@ -126,7 +154,7 @@ const Auth = (() => {
     });
 
     ['reg-username','reg-password'].forEach(id => {
-      document.getElementById(id).addEventListener('keydown', e => {
+      document.getElementById(id)?.addEventListener('keydown', e => {
         if (e.key === 'Enter') document.getElementById('register-btn').click();
       });
     });
@@ -139,5 +167,5 @@ const Auth = (() => {
     });
   }
 
-  return { init, getUser, isAdmin, isMod, showAuthScreen, bindEvents };
+  return { init, getUser, isAdmin, isMod, isTemp, getExpiry, showAuthScreen, bindEvents };
 })();

@@ -10,14 +10,19 @@ CREATE TABLE IF NOT EXISTS users (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   username    TEXT    NOT NULL UNIQUE COLLATE NOCASE,
   password    TEXT    NOT NULL,
-  role        TEXT    NOT NULL DEFAULT 'user' CHECK(role IN ('admin','moderator','user')),
+  role        TEXT    NOT NULL DEFAULT 'user' CHECK(role IN ('admin','moderator','user','temporary')),
   created_at  INTEGER NOT NULL DEFAULT (unixepoch()),
   last_seen   INTEGER,
   bio         TEXT    DEFAULT NULL,
   status      TEXT    DEFAULT NULL,
   avatar_url  TEXT    DEFAULT NULL,
-  banner_url  TEXT    DEFAULT NULL
+  banner_url  TEXT    DEFAULT NULL,
+  is_ephemeral INTEGER NOT NULL DEFAULT 0,
+  expires_at  INTEGER DEFAULT NULL
 );
+
+-- Index pour le nettoyage des comptes éphémères expirés
+CREATE INDEX IF NOT EXISTS idx_users_expires ON users(expires_at) WHERE expires_at IS NOT NULL;
 
 -- Catégories de salons
 CREATE TABLE IF NOT EXISTS categories (

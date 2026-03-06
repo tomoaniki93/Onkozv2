@@ -32,9 +32,11 @@ const API = (() => {
     delete: (p)    => request('DELETE', p),
 
     // ── Auth ──────────────────────────────────────────────────────────────
-    setup:    (u, p)  => request('POST', '/auth/setup',   { username: u, password: p }),
-    register: (u, p)  => request('POST', '/auth/register', { username: u, password: p }),
-    login:    (u, p)  => request('POST', '/auth/login',    { username: u, password: p }),
+    setup:           (u, p) => request('POST', '/auth/setup',           { username: u, password: p }),
+    register:        (u, p) => request('POST', '/auth/register',        { username: u, password: p }),
+    registerGuest:   (u)    => request('POST', '/auth/register-guest',  { username: u }),
+    login:           (u, p) => request('POST', '/auth/login',           { username: u, password: p }),
+    setPassword:     (p)    => request('POST', '/auth/set-password',    { password: p }),
     me:       ()      => request('GET',  '/auth/me'),
     checkUsername: (u) => request('GET', `/auth/check-username/${encodeURIComponent(u)}`),
 

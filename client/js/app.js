@@ -514,6 +514,7 @@ const App = (() => {
   async function openModerationModal(ch) {
     // Récupérer les modérateurs
     const mods = allUsers.filter(u => u.role === 'moderator');
+    const temps = allUsers.filter(u => u.role === 'temporary');
     if (!mods.length) {
       AudioSettings.showToast('ℹ️ Aucun modérateur sur le serveur');
       return;

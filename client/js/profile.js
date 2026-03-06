@@ -79,6 +79,25 @@ const Profile = (() => {
 
         </div>
 
+        ${me.role === 'temporary' ? `
+        <div id="secure-account-section" class="flex flex-col gap-2 border-t border-onkoz-border pt-3 mt-1">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-bold uppercase tracking-wider text-amber-400">⏳ Compte temporaire</span>
+            <span id="expiry-countdown" class="text-[0.68rem] text-amber-400/70"></span>
+          </div>
+          <p class="text-xs text-onkoz-text-muted leading-relaxed">
+            Ce compte sera supprimé automatiquement. Définis un mot de passe pour le rendre permanent.
+          </p>
+          <input id="new-password" type="password" placeholder="Nouveau mot de passe (min 6 car.)" autocomplete="new-password"
+                 class="bg-onkoz-deep border border-onkoz-border rounded-md px-3 py-2 text-sm outline-none focus:border-amber-400 transition-colors" />
+          <input id="new-password-confirm" type="password" placeholder="Confirmer le mot de passe"
+                 class="bg-onkoz-deep border border-onkoz-border rounded-md px-3 py-2 text-sm outline-none focus:border-amber-400 transition-colors" />
+          <button id="btn-set-password"
+                  class="bg-amber-500 hover:bg-amber-600 text-white font-semibold text-sm py-2 rounded-md transition-colors">
+            🔒 Sécuriser mon compte
+          </button>
+        </div>` : ''}
+
         <button id="btn-save-profile"
                 class="bg-onkoz-accent hover:bg-onkoz-accent-dk text-white font-semibold text-sm py-2 rounded-md transition-colors mt-1">
           ✅ Enregistrer
@@ -136,6 +155,60 @@ const Profile = (() => {
 
     document.getElementById('close-profile-panel').addEventListener('click', () => panel.remove());
     document.getElementById('btn-save-profile').addEventListener('click', () => saveProfile(panel));
+
+    // ── Section compte éphémère ───────────────────────────────────────────
+    if (me.role === 'temporary') {
+      // Countdown d'expiration
+      const countdownEl = document.getElementById('expiry-countdown');
+      function updateCountdown() {
+        if (!countdownEl) return;
+        const saved = JSON.parse(localStorage.getItem('onkoz_user') || '{}');
+        const expiresAt = saved.expires_at;
+        if (!expiresAt) return;
+        const diff = expiresAt - Math.floor(Date.now() / 1000);
+        if (diff <= 0) {
+          countdownEl.textContent = 'Expiré';
+          return;
+        }
+        const h = Math.floor(diff / 3600);
+        const m = Math.floor((diff % 3600) / 60);
+        countdownEl.textContent = `Expire dans ${h}h${String(m).padStart(2,'0')}`;
+      }
+      updateCountdown();
+      const countdownTimer = setInterval(updateCountdown, 30000);
+      panel.addEventListener('remove', () => clearInterval(countdownTimer), { once: true });
+
+      // Handler définir mot de passe
+      document.getElementById('btn-set-password')?.addEventListener('click', async () => {
+        const pwd  = document.getElementById('new-password').value;
+        const pwd2 = document.getElementById('new-password-confirm').value;
+        if (pwd.length < 6) {
+          AudioSettings.showToast('❌ Mot de passe min 6 caractères');
+          return;
+        }
+        if (pwd !== pwd2) {
+          AudioSettings.showToast('❌ Les mots de passe ne correspondent pas');
+          return;
+        }
+        const btn = document.getElementById('btn-set-password');
+        btn.disabled = true;
+        btn.textContent = '⏳ En cours…';
+        try {
+          const { token, user } = await API.setPassword(pwd);
+          API.setToken(token);
+          // Mettre à jour currentUser via Auth
+          localStorage.setItem('onkoz_user', JSON.stringify(user));
+          panel.remove();
+          AudioSettings.showToast('✅ Compte sécurisé ! Tu es maintenant un membre permanent.');
+          // Recharger pour mettre à jour le rôle dans toute l'UI
+          setTimeout(() => location.reload(), 1500);
+        } catch (e) {
+          AudioSettings.showToast('❌ ' + e.message);
+          btn.disabled = false;
+          btn.textContent = '🔒 Sécuriser mon compte';
+        }
+      });
+    }
 
     // Fermer au clic extérieur
     setTimeout(() => {
@@ -209,7 +282,7 @@ const Profile = (() => {
       ? `<img src="${profile.avatar_url}" class="w-16 h-16 rounded-full object-cover border-4 border-onkoz-surface" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" /><div style="display:none" class="${UI.avatarClass(username)} w-16 h-16 rounded-full border-4 border-onkoz-surface flex items-center justify-center text-2xl font-bold text-white uppercase">${username[0]}</div>`
       : `<div class="${UI.avatarClass(username)} w-16 h-16 rounded-full border-4 border-onkoz-surface flex items-center justify-center text-2xl font-bold text-white uppercase">${username[0]}</div>`;
 
-    const roleLabel = { admin: '👑 Admin', moderator: '🛡 Modérateur', user: '👤 Membre' }[profile.role] || '👤 Membre';
+    const roleLabel = { admin: '👑 Admin', moderator: '🛡 Modérateur', user: '👤 Membre', temporary: '⏳ Temporaire' }[profile.role] || '👤 Membre';
     const memberSince = profile.created_at
       ? new Date(profile.created_at * 1000).toLocaleDateString('fr-FR', { year: 'numeric', month: 'long', day: 'numeric' })
       : '—';

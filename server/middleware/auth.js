@@ -28,6 +28,17 @@ function requireAuth(req, res, next) {
 
   try {
     req.user = verifyToken(token);
+
+    // Vérifier si le compte éphémère est expiré
+    if (req.user.role === 'temporary') {
+      const { getDb } = require('../db/database');
+      const db = getDb();
+      const u  = db.prepare('SELECT expires_at, is_ephemeral FROM users WHERE id = ?').get(req.user.id);
+      if (u && u.is_ephemeral && u.expires_at && u.expires_at < Math.floor(Date.now() / 1000)) {
+        return res.status(401).json({ error: 'Compte éphémère expiré', expired: true });
+      }
+    }
+
     next();
   } catch {
     return res.status(401).json({ error: 'Token invalide ou expiré' });

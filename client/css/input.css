@@ -44,10 +44,12 @@
   .role-badge.admin     { @apply text-onkoz-admin     bg-onkoz-admin/15; }
   .role-badge.moderator { @apply text-onkoz-mod       bg-onkoz-mod/15;   }
   .role-badge.user      { @apply text-onkoz-user      bg-onkoz-user/15;  }
+  .role-badge.temporary { @apply text-amber-400       bg-amber-400/15;   }
 
   /* ── Auteur de message ── */
   .msg-author.admin     { @apply text-onkoz-admin; }
-  .msg-author.moderator { @apply text-onkoz-mod; }
+  .msg-author.moderator  { @apply text-onkoz-mod; }
+  .msg-author.temporary  { @apply text-amber-400; }
   .msg-author.user      { @apply text-onkoz-text; }
 
   /* ── Peer vocal ── */
