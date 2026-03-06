@@ -31,6 +31,9 @@ function getDb() {
     console.log('[DB] Migration : expires_at ajouté');
   }
 
+  // Créer l'index expires_at seulement une fois la colonne présente
+  db.exec('CREATE INDEX IF NOT EXISTS idx_users_expires ON users(expires_at)');
+
   // Créer le compte admin par défaut s'il n'existe pas
   ensureAdmin(db);
 

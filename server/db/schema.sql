@@ -21,8 +21,6 @@ CREATE TABLE IF NOT EXISTS users (
   expires_at  INTEGER DEFAULT NULL
 );
 
--- Index pour le nettoyage des comptes éphémères expirés
-CREATE INDEX IF NOT EXISTS idx_users_expires ON users(expires_at) WHERE expires_at IS NOT NULL;
 
 -- Catégories de salons
 CREATE TABLE IF NOT EXISTS categories (
