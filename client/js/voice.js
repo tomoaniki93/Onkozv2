@@ -39,7 +39,19 @@ const Voice = (() => {
   let screenConsumers = new Map(); // peerId → consumer vidéo
 
   // ── Init ────────────────────────────────────────────────────────────────────
-  function init(s) { socket = s; }
+  function init(s) {
+    socket = s;
+    // Répondre aux demandes de re-sync de l'overlay Electron
+    if (window.ElectronAPI?.onSyncRequest) {
+      window.ElectronAPI.onSyncRequest(() => {
+        window.ElectronAPI.overlayUpdate({ type: 'clear' });
+        overlayMembers.forEach(({ username, speaking, muted }, peerId) => {
+          window.ElectronAPI.overlayUpdate({ type: 'add', peerId, username, muted: muted || false });
+          if (speaking) window.ElectronAPI.overlayUpdate({ type: 'speaking', peerId, speaking: true });
+        });
+      });
+    }
+  }
 
   // ═══════════════════════════════════════════════════════════════════════════
   //  REJOINDRE UN SALON
@@ -1025,6 +1037,17 @@ const Voice = (() => {
     toggleOverlay: () => {
       if (window.ElectronAPI?.isElectron) {
         window.ElectronAPI.overlayToggle();
+        // Re-sync tous les membres actuels après l'ouverture de la fenêtre
+        // (délai 300ms pour que la fenêtre soit prête à recevoir les IPC)
+        setTimeout(() => {
+          window.ElectronAPI.overlayUpdate({ type: 'clear' });
+          overlayMembers.forEach(({ username, speaking, muted }, peerId) => {
+            window.ElectronAPI.overlayUpdate({ type: 'add', peerId, username, muted: muted || false });
+            if (speaking) {
+              window.ElectronAPI.overlayUpdate({ type: 'speaking', peerId, speaking: true });
+            }
+          });
+        }, 300);
       } else {
         overlayVisible ? hideOverlay() : showOverlay();
       }
