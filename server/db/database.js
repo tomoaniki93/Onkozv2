@@ -33,19 +33,34 @@ function getDb() {
     console.log('[DB] Migration : expires_at ajouté');
   }
 
-  // 2. Vérifier si le CHECK constraint bloque 'temporary'
-  //    SQLite ne peut pas modifier un CHECK directement → on recrée la table
+  // 2. Récupérer un état cassé (migration précédente interrompue)
+  //    _users_old existe mais users n'existe pas → rollback
+  const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map(r => r.name);
+  if (tables.includes('_users_old') && !tables.includes('users')) {
+    console.log('[DB] Récupération : migration interrompue détectée, rollback…');
+    db.pragma('foreign_keys = OFF');
+    db.exec('ALTER TABLE _users_old RENAME TO users');
+    db.pragma('foreign_keys = ON');
+    console.log('[DB] Récupération : table users restaurée ✓');
+  }
+
+  // 3. Vérifier si le CHECK constraint bloque 'temporary'
+  //    SQLite ne supporte pas ALTER COLUMN → on recrée via transaction
   const tableSQL = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='users'").get()?.sql || '';
-  if (!tableSQL.includes("'temporary'") && !tableSQL.includes('"temporary"')) {
-    console.log('[DB] Migration : mise à jour du CHECK constraint users (ajout temporary)…');
-    db.exec(`
-      PRAGMA foreign_keys = OFF;
+  if (tableSQL && !tableSQL.includes("'temporary'") && !tableSQL.includes('"temporary"')) {
+    console.log('[DB] Migration : mise à jour du CHECK constraint (ajout temporary)…');
 
-      -- Renommer l'ancienne table
-      ALTER TABLE users RENAME TO _users_old;
+    // Récupérer les colonnes existantes pour le INSERT SELECT dynamique
+    const cols = db.pragma('table_info(users)').map(c => c.name);
+    const hasEphemeral = cols.includes('is_ephemeral');
+    const hasExpires   = cols.includes('expires_at');
 
-      -- Recréer avec le bon CHECK
-      CREATE TABLE users (
+    const migrate = db.transaction(() => {
+      db.pragma('foreign_keys = OFF');
+
+      db.exec('ALTER TABLE users RENAME TO _users_old');
+
+      db.exec(`CREATE TABLE users (
         id           INTEGER PRIMARY KEY AUTOINCREMENT,
         username     TEXT    NOT NULL UNIQUE COLLATE NOCASE,
         password     TEXT    NOT NULL,
@@ -59,22 +74,23 @@ function getDb() {
         banner_url   TEXT    DEFAULT NULL,
         is_ephemeral INTEGER NOT NULL DEFAULT 0,
         expires_at   INTEGER DEFAULT NULL
-      );
+      )`);
 
-      -- Copier les données
-      INSERT INTO users (id, username, password, role, created_at, last_seen,
-                         bio, status, avatar_url, banner_url, is_ephemeral, expires_at)
-      SELECT id, username, password, role, created_at, last_seen,
-             bio, status, avatar_url, banner_url,
-             COALESCE(is_ephemeral, 0),
-             expires_at
-      FROM _users_old;
+      const ephCol     = hasEphemeral ? 'is_ephemeral' : '0';
+      const expCol     = hasExpires   ? 'expires_at'   : 'NULL';
+      db.exec(`INSERT INTO users
+        (id, username, password, role, created_at, last_seen,
+         bio, status, avatar_url, banner_url, is_ephemeral, expires_at)
+        SELECT id, username, password, role, created_at, last_seen,
+               bio, status, avatar_url, banner_url,
+               COALESCE(${ephCol}, 0), ${expCol}
+        FROM _users_old`);
 
-      -- Supprimer l'ancienne table
-      DROP TABLE _users_old;
+      db.exec('DROP TABLE _users_old');
+      db.pragma('foreign_keys = ON');
+    });
 
-      PRAGMA foreign_keys = ON;
-    `);
+    migrate();
     console.log('[DB] Migration : CHECK constraint mis à jour ✓');
   }
 
