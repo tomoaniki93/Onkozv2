@@ -17,41 +17,50 @@ const NoiseReducer = (() => {
   const KEY_ENABLED   = 'onkoz_nr_enabled';
   const KEY_INTENSITY = 'onkoz_nr_intensity';
 
-  // Paramètres par niveau — calibrés pour ne pas dégrader la voix
+  // Paramètres par niveau
   const PRESETS = {
     0: null, // désactivé — stream brut
 
     1: {     // Léger — open space calme
-      highPassFreq:  80,    // coupe bourdonnements électriques
-      compThreshold: -20,   // seuil doux
-      compRatio:     2,     // compression légère
-      compAttack:    0.005,
-      compRelease:   0.20,
-      gateThreshold: 0.005, // ~-46 dB — seuil très bas, clavier fort uniquement
-      gateSmoothing: 0.985, // ouverture rapide (~30ms)
-      outputGain:    1.0,
+      highPassFreq:       80,
+      compThreshold:      -20,
+      compRatio:          2,
+      compAttack:         0.005,
+      compRelease:        0.20,
+      gateThreshold:      0.005,
+      gateSmoothing:      0.985,
+      transientSuppress:  1,     // suppression clics activée
+      holdMs:             40,    // hold léger
+      outputGain:         1.0,
+      rnnoise:            false, // pas de WASM niveau 1
     },
 
     2: {     // Modéré — clavier, ventilateur, TV en fond
-      highPassFreq:  80,
-      compThreshold: -26,
-      compRatio:     4,
-      compAttack:    0.003,
-      compRelease:   0.15,
-      gateThreshold: 0.015, // ~-36 dB
-      gateSmoothing: 0.980, // ouverture en ~20ms
-      outputGain:    1.1,
+      highPassFreq:       80,
+      compThreshold:      -26,
+      compRatio:          4,
+      compAttack:         0.003,
+      compRelease:        0.15,
+      gateThreshold:      0.015,
+      gateSmoothing:      0.980,
+      transientSuppress:  1,
+      holdMs:             80,    // hold 80ms — couvre clics + claviers méca
+      outputGain:         1.1,
+      rnnoise:            false,
     },
 
-    3: {     // Agressif — environnement très bruyant
-      highPassFreq:  100,
-      compThreshold: -32,
-      compRatio:     7,
-      compAttack:    0.002,
-      compRelease:   0.10,
-      gateThreshold: 0.025, // ~-32 dB
-      gateSmoothing: 0.970, // ouverture en ~10ms — réagit vite aux bruits brefs
-      outputGain:    1.2,
+    3: {     // Maximum — RNNoise deep learning + gate agressif
+      highPassFreq:       100,
+      compThreshold:      -32,
+      compRatio:          6,
+      compAttack:         0.002,
+      compRelease:        0.10,
+      gateThreshold:      0.020,
+      gateSmoothing:      0.975,
+      transientSuppress:  1,
+      holdMs:             120,   // hold 120ms — élimine toute impulsion
+      outputGain:         1.2,
+      rnnoise:            true,  // RNNoise WASM deep learning (niveau Discord/Krisp)
     },
   };
 
@@ -103,19 +112,36 @@ const NoiseReducer = (() => {
 
       // 4. Noise gate via AudioWorklet (thread dédié → pas de glitch)
       let lastNode = compressor;
+
+      // ── Noise Gate v2 (transient suppressor + hold time) ──────────────────
       try {
         await audioCtx.audioWorklet.addModule('/js/noise-gate-processor.js');
         const gateNode = new AudioWorkletNode(audioCtx, 'noise-gate-processor');
-        gateNode.parameters.get('threshold').value = preset.gateThreshold;
-        gateNode.parameters.get('smoothing').value  = preset.gateSmoothing;
+        gateNode.parameters.get('threshold').value         = preset.gateThreshold;
+        gateNode.parameters.get('smoothing').value         = preset.gateSmoothing;
+        gateNode.parameters.get('transientSuppress').value = preset.transientSuppress ?? 1;
+        gateNode.parameters.get('holdMs').value            = preset.holdMs ?? 80;
         compressor.connect(gateNode);
         lastNode = gateNode;
-        console.log('[NoiseReducer] Gate AudioWorklet actif');
+        console.log('[NoiseReducer] Gate v2 actif (transient suppressor + hold)');
       } catch (e) {
         console.warn('[NoiseReducer] AudioWorklet indisponible :', e.message);
       }
 
-      // Chaîne : source → highpass → compressor → [gate] → gain → destination
+      // ── RNNoise deep learning (niveau 3 uniquement) ────────────────────────
+      if (preset.rnnoise) {
+        try {
+          await audioCtx.audioWorklet.addModule('/js/rnnoise-processor.js');
+          const rnNode = new AudioWorkletNode(audioCtx, 'rnnoise-processor');
+          lastNode.connect(rnNode);
+          lastNode = rnNode;
+          console.log('[NoiseReducer] RNNoise deep learning actif');
+        } catch (e) {
+          console.warn('[NoiseReducer] RNNoise indisponible :', e.message);
+        }
+      }
+
+      // Chaîne : source → highpass → compressor → gate → [rnnoise] → gain → destination
       sourceNode
         .connect(highPass)
         .connect(compressor);
@@ -124,7 +150,7 @@ const NoiseReducer = (() => {
       gainNode.connect(destination);
 
       isActive = true;
-      console.log(`[NoiseReducer] Actif — intensité ${intensity}`);
+      console.log(`[NoiseReducer] Actif — intensité ${intensity}${preset.rnnoise ? ' + RNNoise' : ''}`);
       return destination.stream;
 
     } catch (err) {

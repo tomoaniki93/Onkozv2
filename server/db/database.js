@@ -20,8 +20,10 @@ function getDb() {
   const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
   db.exec(schema);
 
-  // Migration runtime : colonnes éphémères (DB existantes sans ces colonnes)
+  // ── Migration : support comptes éphémères ────────────────────────────────
   const userCols = db.pragma('table_info(users)').map(c => c.name);
+
+  // 1. Ajouter colonnes manquantes (DB < éphémère)
   if (!userCols.includes('is_ephemeral')) {
     db.exec('ALTER TABLE users ADD COLUMN is_ephemeral INTEGER NOT NULL DEFAULT 0');
     console.log('[DB] Migration : is_ephemeral ajouté');
@@ -31,7 +33,52 @@ function getDb() {
     console.log('[DB] Migration : expires_at ajouté');
   }
 
-  // Créer l'index expires_at seulement une fois la colonne présente
+  // 2. Vérifier si le CHECK constraint bloque 'temporary'
+  //    SQLite ne peut pas modifier un CHECK directement → on recrée la table
+  const tableSQL = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='users'").get()?.sql || '';
+  if (!tableSQL.includes("'temporary'") && !tableSQL.includes('"temporary"')) {
+    console.log('[DB] Migration : mise à jour du CHECK constraint users (ajout temporary)…');
+    db.exec(`
+      PRAGMA foreign_keys = OFF;
+
+      -- Renommer l'ancienne table
+      ALTER TABLE users RENAME TO _users_old;
+
+      -- Recréer avec le bon CHECK
+      CREATE TABLE users (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        username     TEXT    NOT NULL UNIQUE COLLATE NOCASE,
+        password     TEXT    NOT NULL,
+        role         TEXT    NOT NULL DEFAULT 'user'
+                     CHECK(role IN ('admin','moderator','user','temporary')),
+        created_at   INTEGER NOT NULL DEFAULT (unixepoch()),
+        last_seen    INTEGER,
+        bio          TEXT    DEFAULT NULL,
+        status       TEXT    DEFAULT NULL,
+        avatar_url   TEXT    DEFAULT NULL,
+        banner_url   TEXT    DEFAULT NULL,
+        is_ephemeral INTEGER NOT NULL DEFAULT 0,
+        expires_at   INTEGER DEFAULT NULL
+      );
+
+      -- Copier les données
+      INSERT INTO users (id, username, password, role, created_at, last_seen,
+                         bio, status, avatar_url, banner_url, is_ephemeral, expires_at)
+      SELECT id, username, password, role, created_at, last_seen,
+             bio, status, avatar_url, banner_url,
+             COALESCE(is_ephemeral, 0),
+             expires_at
+      FROM _users_old;
+
+      -- Supprimer l'ancienne table
+      DROP TABLE _users_old;
+
+      PRAGMA foreign_keys = ON;
+    `);
+    console.log('[DB] Migration : CHECK constraint mis à jour ✓');
+  }
+
+  // 3. Index expires_at (créé après que la colonne existe)
   db.exec('CREATE INDEX IF NOT EXISTS idx_users_expires ON users(expires_at)');
 
   // Créer le compte admin par défaut s'il n'existe pas
