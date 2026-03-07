@@ -30,7 +30,7 @@ const NoiseReducer = (() => {
       gateThreshold:      0.005,
       gateSmoothing:      0.985,
       transientSuppress:  1,     // suppression clics activée
-      holdMs:             40,    // hold léger
+      holdMs:             20,    // hold léger
       outputGain:         1.0,
       rnnoise:            false, // pas de WASM niveau 1
     },
@@ -44,7 +44,7 @@ const NoiseReducer = (() => {
       gateThreshold:      0.015,
       gateSmoothing:      0.980,
       transientSuppress:  1,
-      holdMs:             80,    // hold 80ms — couvre clics + claviers méca
+      holdMs:             30,    // hold 30ms
       outputGain:         1.1,
       rnnoise:            false,
     },
@@ -58,7 +58,7 @@ const NoiseReducer = (() => {
       gateThreshold:      0.020,
       gateSmoothing:      0.975,
       transientSuppress:  1,
-      holdMs:             120,   // hold 120ms — élimine toute impulsion
+      holdMs:             30,    // hold 30ms
       outputGain:         1.2,
       rnnoise:            true,  // RNNoise WASM deep learning (niveau Discord/Krisp)
     },
