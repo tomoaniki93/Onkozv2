@@ -217,13 +217,7 @@ const App = (() => {
     name.className = 'flex-1 text-[0.72rem] font-bold tracking-wider uppercase text-onkoz-text-muted';
     name.textContent = 'Éphémères';
 
-    const addBtn = document.createElement('button');
-    addBtn.className = 'w-5 h-5 flex items-center justify-center rounded text-onkoz-text-muted hover:text-onkoz-text hover:bg-onkoz-hover transition-colors text-sm';
-    addBtn.textContent = '+';
-    addBtn.title = 'Créer un salon éphémère';
-    addBtn.addEventListener('click', createEphemeral);
-
-    header.append(name, addBtn);
+    header.append(name);
 
     const list = document.createElement('ul');
     list.id = 'ephemeral-channels';
