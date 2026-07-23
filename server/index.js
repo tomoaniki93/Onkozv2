@@ -22,6 +22,9 @@ const PORT = process.env.PORT || 3000;
 
 // ── App ───────────────────────────────────────────────────────────────────────
 const app    = express();
+// Derrière nginx : faire confiance au proxy pour obtenir la vraie IP client
+// (indispensable pour que le rate-limiting d'authentification fonctionne par IP)
+app.set('trust proxy', 1);
 const server = http.createServer(app);
 const io     = new Server(server, {
   cors: { origin: '*', methods: ['GET', 'POST'] },
@@ -30,6 +33,34 @@ const io     = new Server(server, {
 // ── Middlewares ───────────────────────────────────────────────────────────────
 app.use(cors());
 app.use(express.json());
+
+// ── Content-Security-Policy ───────────────────────────────────────────────────
+// Démarrée en Report-Only : les violations sont signalées dans la console du
+// navigateur SANS rien bloquer. Une fois vérifié que RNNoise (WASM/worklet), les
+// polices, les previews et le socket fonctionnent → passer CSP_REPORT_ONLY à false.
+const CSP_REPORT_ONLY = true;
+const CSP_POLICY = [
+  "default-src 'self'",
+  "script-src 'self' 'wasm-unsafe-eval'",                          // scripts same-origin + WASM RNNoise
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com", // Tailwind + styles inline
+  "img-src 'self' data: https:",                                   // avatars, uploads, previews, miniatures
+  "font-src 'self' https://fonts.gstatic.com data:",
+  "connect-src 'self'",                                            // API + socket.io (même origine)
+  "media-src 'self' blob:",                                        // flux WebRTC (srcObject) / blob
+  "worker-src 'self' blob:",                                       // AudioWorklet
+  "child-src 'self' blob:",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'none'",
+].join('; ');
+app.use((req, res, next) => {
+  res.setHeader(
+    CSP_REPORT_ONLY ? 'Content-Security-Policy-Report-Only' : 'Content-Security-Policy',
+    CSP_POLICY
+  );
+  next();
+});
 
 // Fichiers statiques du client
 app.use((req, res, next) => {
@@ -67,6 +98,15 @@ function scheduleDMCleanup() {
 // ── Démarrage ─────────────────────────────────────────────────────────────────
 async function start() {
   try {
+    // Sécurité : refuser de démarrer en production sans secret JWT robuste
+    const secret = process.env.JWT_SECRET;
+    if (process.env.NODE_ENV === 'production' &&
+        (!secret || secret.length < 32 || secret.includes('changeme'))) {
+      console.error('[FATAL] JWT_SECRET manquant ou trop faible en production. ' +
+        'Definissez une valeur aleatoire d\'au moins 32 caracteres dans .env.');
+      process.exit(1);
+    }
+
     // Init DB
     getDb();
     console.log('[DB] SQLite initialisée');

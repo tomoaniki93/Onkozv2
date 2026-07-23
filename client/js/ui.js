@@ -2,6 +2,16 @@
 const UI = (() => {
   const AV_COLORS = ['av-0','av-1','av-2','av-3','av-4','av-5','av-6','av-7'];
 
+  // Échappe le HTML — à utiliser sur toute donnée utilisateur injectée via innerHTML
+  function escapeHtml(str) {
+    return String(str ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
   function avatarClass(username) {
     let hash = 0;
     for (const c of username) hash = (hash * 31 + c.charCodeAt(0)) & 0xffff;
@@ -314,6 +324,7 @@ const UI = (() => {
   }
 
   return {
+    escapeHtml,
     avatarClass, makeAvatar, formatTime, roleBadge, openModal,
     setUsers, setOnline, setUserOnline, setUserOffline, renderFooterUser,
   };

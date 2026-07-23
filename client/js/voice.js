@@ -471,6 +471,12 @@ const Voice = (() => {
   }
 
   // ── Aperçu local (partageur) ───────────────────────────────────────────────
+  // Bascule plein écran natif (doit venir d'un clic utilisateur)
+  function toggleFullscreen(el) {
+    if (document.fullscreenElement) document.exitFullscreen?.();
+    else el.requestFullscreen?.().catch(() => {});
+  }
+
   function showLocalPreview(stream) {
     hideLocalPreview();
 
@@ -483,13 +489,22 @@ const Voice = (() => {
     badge.innerHTML = '<span class="w-2 h-2 rounded-full bg-onkoz-success animate-pulse shrink-0"></span> Tu partages ton écran';
 
     const video = document.createElement('video');
-    video.className = 'max-w-5xl max-h-[70vh] rounded-xl border border-onkoz-border shadow-dm object-contain';
+    video.className = 'rounded-xl border border-onkoz-border shadow-dm object-contain cursor-zoom-in';
+    video.style.maxWidth  = '95vw';
+    video.style.maxHeight = '85vh';
     video.srcObject = stream;
     video.autoplay  = true;
     video.muted     = true;
+    video.title     = 'Double-clic : plein écran';
+    video.addEventListener('dblclick', () => toggleFullscreen(video));
 
     const btns = document.createElement('div');
     btns.className = 'flex items-center gap-3';
+
+    const fsBtn = document.createElement('button');
+    fsBtn.className = 'flex items-center gap-2 px-4 py-2.5 bg-onkoz-accent hover:bg-onkoz-accent-dk text-white font-semibold rounded-lg transition-colors text-sm';
+    fsBtn.innerHTML = '⛶ Plein écran';
+    fsBtn.addEventListener('click', () => toggleFullscreen(video));
 
     const stopBtn = document.createElement('button');
     stopBtn.className = 'flex items-center gap-2 px-5 py-2.5 bg-onkoz-danger/20 hover:bg-onkoz-danger/30 text-onkoz-danger border border-onkoz-danger/30 font-semibold rounded-lg transition-colors';
@@ -501,7 +516,7 @@ const Voice = (() => {
     hideBtn.innerHTML = '✕ Masquer l\'aperçu';
     hideBtn.addEventListener('click', () => overlay.remove());
 
-    btns.append(stopBtn, hideBtn);
+    btns.append(fsBtn, stopBtn, hideBtn);
     overlay.append(badge, video, btns);
     document.body.appendChild(overlay);
   }
@@ -523,13 +538,22 @@ const Voice = (() => {
     badge.innerHTML = `<span class="w-2 h-2 rounded-full bg-onkoz-success animate-pulse shrink-0"></span> <strong>${username}</strong>&nbsp;partage son écran`;
 
     const video = document.createElement('video');
-    video.className = 'max-w-5xl max-h-[70vh] rounded-xl border border-onkoz-border shadow-dm object-contain';
+    video.className = 'rounded-xl border border-onkoz-border shadow-dm object-contain cursor-zoom-in';
+    video.style.maxWidth  = '95vw';
+    video.style.maxHeight = '85vh';
     video.srcObject = new MediaStream([track]);
     video.autoplay  = true;
     video.muted     = false;
+    video.title     = 'Double-clic : plein écran';
+    video.addEventListener('dblclick', () => toggleFullscreen(video));
 
     const btns = document.createElement('div');
     btns.className = 'flex items-center gap-3';
+
+    const fsBtn = document.createElement('button');
+    fsBtn.className = 'flex items-center gap-2 px-4 py-2.5 bg-onkoz-accent hover:bg-onkoz-accent-dk text-white font-semibold rounded-lg transition-colors text-sm';
+    fsBtn.innerHTML = '⛶ Plein écran';
+    fsBtn.addEventListener('click', () => toggleFullscreen(video));
 
     const closeBtn = document.createElement('button');
     closeBtn.className = 'flex items-center gap-2 px-5 py-2.5 bg-onkoz-surface border border-onkoz-border hover:bg-onkoz-hover text-onkoz-text font-semibold rounded-lg transition-colors';
@@ -543,19 +567,19 @@ const Voice = (() => {
     minimizeBtn.addEventListener('click', () => {
       minimized = !minimized;
       if (minimized) {
-        video.classList.remove('max-w-5xl', 'max-h-[70vh]');
-        video.classList.add('w-64', 'h-36');
+        video.style.maxWidth = ''; video.style.maxHeight = '';
+        video.style.width = '16rem'; video.style.height = '9rem';
         overlay.className = 'fixed bottom-20 right-4 z-[200] flex flex-col items-center gap-2';
         minimizeBtn.textContent = '⬆ Agrandir';
       } else {
-        video.classList.add('max-w-5xl', 'max-h-[70vh]');
-        video.classList.remove('w-64', 'h-36');
+        video.style.width = ''; video.style.height = '';
+        video.style.maxWidth = '95vw'; video.style.maxHeight = '85vh';
         overlay.className = 'fixed inset-0 z-[200] bg-black/90 flex flex-col items-center justify-center gap-4';
         minimizeBtn.textContent = '⬇ Réduire';
       }
     });
 
-    btns.append(closeBtn, minimizeBtn);
+    btns.append(fsBtn, closeBtn, minimizeBtn);
     overlay.append(badge, video, btns);
     document.body.appendChild(overlay);
   }

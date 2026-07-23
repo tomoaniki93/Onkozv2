@@ -761,10 +761,10 @@ const Chat = (() => {
         row.innerHTML = `
           <div class="flex-1 min-w-0">
             <div class="flex items-center gap-2 mb-0.5">
-              <span class="text-xs font-bold text-onkoz-text">${UI.escapeHtml ? UI.escapeHtml(msg.username) : msg.username}</span>
+              <span class="text-xs font-bold text-onkoz-text">${UI.escapeHtml(msg.username)}</span>
               <span class="text-[0.68rem] text-onkoz-text-muted">${UI.formatTime(msg.created_at)}</span>
             </div>
-            <p class="text-xs text-onkoz-text-muted truncate">${(msg.content || '').replace(/\[image:[^\]]+\]/g, '🖼 Image')}</p>
+            <p class="text-xs text-onkoz-text-muted truncate">${UI.escapeHtml((msg.content || '').replace(/\[image:[^\]]+\]/g, '🖼 Image'))}</p>
           </div>
           ${(Auth.isMod() || Auth.isAdmin()) ? `
           <button class="unpin-btn shrink-0 w-6 h-6 flex items-center justify-center rounded hover:bg-onkoz-danger/20 text-onkoz-text-muted hover:text-onkoz-danger transition-colors text-xs" data-id="${msg.id}" title="Désépingler">✕</button>

@@ -306,12 +306,12 @@ const Profile = (() => {
 
         <!-- Nom + rôle -->
         <div class="flex items-center gap-2 flex-wrap">
-          <span class="font-bold text-lg text-onkoz-text">${username}</span>
+          <span class="font-bold text-lg text-onkoz-text">${UI.escapeHtml(username)}</span>
           <span class="text-[0.72rem] font-semibold text-onkoz-text-muted">${roleLabel}</span>
         </div>
 
         <!-- Statut -->
-        ${profile.status ? `<p class="text-sm text-onkoz-accent-lt mt-0.5">💬 ${profile.status}</p>` : ''}
+        ${profile.status ? `<p class="text-sm text-onkoz-accent-lt mt-0.5">💬 ${UI.escapeHtml(profile.status)}</p>` : ''}
 
         <!-- Séparateur -->
         <div class="border-t border-onkoz-border my-3"></div>
@@ -320,7 +320,7 @@ const Profile = (() => {
         ${profile.bio ? `
         <div class="mb-3">
           <p class="text-[0.7rem] font-bold uppercase tracking-wider text-onkoz-text-muted mb-1">À PROPOS</p>
-          <p class="text-sm text-onkoz-text leading-relaxed">${profile.bio}</p>
+          <p class="text-sm text-onkoz-text leading-relaxed">${UI.escapeHtml(profile.bio)}</p>
         </div>` : ''}
 
         <!-- Infos -->

@@ -114,6 +114,10 @@ function getRtpCapabilities(roomId) {
 }
 
 // ── Transports WebRTC ─────────────────────────────────────────────────────────
+// Plafonds de bitrate — protègent la bande passante indépendamment du client
+const MAX_INCOMING_BITRATE     = 2_500_000; // ingress max par transport (audio + écran + marge)
+const INITIAL_OUTGOING_BITRATE = 1_000_000; // estimation de départ → montée en qualité plus rapide
+
 async function createWebRtcTransport(roomId) {
   const room = rooms.get(roomId);
   if (!room) throw new Error('Salle introuvable');
@@ -123,7 +127,15 @@ async function createWebRtcTransport(roomId) {
     enableUdp: true,
     enableTcp: true,
     preferUdp: true,
+    initialAvailableOutgoingBitrate: INITIAL_OUTGOING_BITRATE,
   });
+
+  // Plafonne ce qu'un client peut ENVOYER au SFU, même s'il ignore son propre maxBitrate
+  try {
+    await transport.setMaxIncomingBitrate(MAX_INCOMING_BITRATE);
+  } catch (err) {
+    console.warn('[mediasoup] setMaxIncomingBitrate ignoré :', err.message);
+  }
 
   room.transports.set(transport.id, transport);
   return transport;

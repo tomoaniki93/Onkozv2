@@ -5,7 +5,8 @@ const SECRET = () => {
   const s = process.env.JWT_SECRET;
   if (!s) {
     if (process.env.NODE_ENV === 'production') {
-      console.error('[SECURITY] JWT_SECRET non défini en production ! Définissez-le dans .env');
+      // Ne jamais signer/vérifier avec un secret public en production
+      throw new Error('[SECURITY] JWT_SECRET non défini en production');
     }
     return 'onkoz_dev_secret';
   }

@@ -18,13 +18,21 @@ const UPLOAD_DIR = path.join(__dirname, '..', '..', 'uploads');
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
 // Types autorisés
-const ALLOWED = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
+// Extension déterminée par le type MIME validé — jamais par le nom fourni par
+// le client (empêche l'upload d'un .html / .svg piégé servi en same-origin).
+const MIME_EXT = {
+  'image/jpeg': '.jpg',
+  'image/png':  '.png',
+  'image/gif':  '.gif',
+  'image/webp': '.webp',
+};
+const ALLOWED  = new Set(Object.keys(MIME_EXT));
 const MAX_SIZE = 10 * 1024 * 1024; // 10 Mo
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, UPLOAD_DIR),
   filename:    (req, file, cb) => {
-    const ext  = path.extname(file.originalname).toLowerCase() || '.jpg';
+    const ext  = MIME_EXT[file.mimetype] || '.jpg';
     const name = crypto.randomBytes(16).toString('hex') + ext;
     cb(null, name);
   },

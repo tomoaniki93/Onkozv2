@@ -218,11 +218,16 @@ function setupSocketHandlers(io) {
 
     // ── MEDIASOUP SIGNALING ───────────────────────────────────────────────────
 
+    // Autorisation SFU : n'autoriser les opérations mediasoup que sur une salle
+    // effectivement rejointe (le peer est enregistré par voice:join / ephemeral).
+    const isRoomMember = (roomId) => Boolean(ms.rooms.get(roomId)?.peers.has(socket.id));
+
     socket.on('ms:getRouterCapabilities', ({ roomId }, cb) => {
       cb?.({ caps: ms.getRtpCapabilities(roomId) });
     });
 
     socket.on('ms:createTransport', async ({ roomId }, cb) => {
+      if (!isRoomMember(roomId)) return cb?.({ error: 'Non autorisé' });
       try {
         const t = await ms.createWebRtcTransport(roomId);
         ms.rooms.get(roomId)?.peers.get(socket.id)?.transportIds.push(t.id);
@@ -231,11 +236,13 @@ function setupSocketHandlers(io) {
     });
 
     socket.on('ms:connectTransport', async ({ roomId, transportId, dtlsParameters }, cb) => {
+      if (!isRoomMember(roomId)) return cb?.({ error: 'Non autorisé' });
       try { await ms.connectTransport(roomId, transportId, dtlsParameters); cb?.({ ok: true }); }
       catch (err) { cb?.({ error: err.message }); }
     });
 
     socket.on('ms:produce', async ({ roomId, transportId, kind, rtpParameters, appData }, cb) => {
+      if (!isRoomMember(roomId)) return cb?.({ error: 'Non autorisé' });
       try {
         const producerId = await ms.produce(roomId, socket.id, transportId, kind, rtpParameters, appData || {});
         // Notifier tous les autres peers avec appData (pour distinguer audio/screen)
@@ -251,6 +258,7 @@ function setupSocketHandlers(io) {
     });
 
     socket.on('ms:consume', async ({ roomId, producerPeerId, transportId, rtpCapabilities, producerId }, cb) => {
+      if (!isRoomMember(roomId)) return cb?.({ error: 'Non autorisé' });
       try { cb?.(await ms.consume(roomId, socket.id, producerPeerId, transportId, rtpCapabilities, producerId)); }
       catch (err) { cb?.({ error: err.message }); }
     });

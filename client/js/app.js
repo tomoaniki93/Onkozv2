@@ -631,6 +631,19 @@ const App = (() => {
 
   // ── Bind events ───────────────────────────────────────────────────────────
   function bindEvents() {
+    // Confirmation navigateur si on ferme l'onglet EN ÉTANT en vocal / partage d'écran.
+    // NB : le texte du popup est imposé par le navigateur (non personnalisable).
+    // Web uniquement : en Electron, beforeunload bloquerait la fermeture sans dialogue
+    // (à gérer côté main process via win.on('close') si un jour souhaité).
+    if (!window.ElectronAPI?.isElectron) {
+      window.addEventListener('beforeunload', (e) => {
+        if (Voice.getCurrentRoomId()) {   // en vocal → on prévient d'une fermeture accidentelle
+          e.preventDefault();
+          e.returnValue = '';             // requis pour déclencher la popup native
+        }
+      });
+    }
+
     // Panneau vocal sidebar
     document.getElementById('voice-panel-screenshare').addEventListener('click', () => Voice.toggleScreenShare());
     document.getElementById('voice-panel-mute').addEventListener('click',  () => Voice.toggleMute());
