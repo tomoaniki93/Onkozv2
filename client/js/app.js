@@ -444,9 +444,17 @@ const App = (() => {
       members.forEach(m => {
         const row = document.createElement('div');
         row.className = 'voice-presence-row';
+        row.dataset.userId = m.userId;                 // pour le rafraîchissement live
         const av = document.createElement('div');
-        av.className = `vpr-av ${UI.avatarClass(m.username)}`;
-        av.textContent = m.username[0].toUpperCase();
+        av.className = `vpr-av user-avatar ${UI.avatarClass(m.username)}`;
+        const avatarUrl = m.avatar_url || Profile.getAvatar?.(m.userId);
+        if (avatarUrl) {
+          av.style.backgroundImage    = `url("${avatarUrl}")`;
+          av.style.backgroundSize     = 'cover';
+          av.style.backgroundPosition = 'center';
+        } else {
+          av.textContent = m.username[0].toUpperCase();
+        }
         const name = document.createElement('span');
         name.className = 'vpr-name';
         name.textContent = m.username;

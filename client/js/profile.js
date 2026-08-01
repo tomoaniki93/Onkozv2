@@ -638,5 +638,10 @@ const Profile = (() => {
     if (me && cache[me.id]) applyFooterAvatar(cache[me.id].avatar_url);
   }
 
-  return { init, openEditPanel, openProfilePopup, preloadProfiles };
+  // Avatar connu d'un utilisateur (depuis le cache des profils), ou null
+  function getAvatar(userId) {
+    return cache[userId]?.avatar_url || null;
+  }
+
+  return { init, openEditPanel, openProfilePopup, preloadProfiles, getAvatar };
 })();
