@@ -55,7 +55,52 @@ const Profile = (() => {
   //   { name: 'Guerrier', url: 'https://onkoz.fr/avatars/guerrier.png' },
   const PRESETS_CUSTOM = [];
 
-  const AVATAR_PRESETS = [...PRESETS_CUSTOM, ...PRESETS_GENERATED];
+  // ── Icônes de classe/spé WoW (hébergées dans client/avatars/class/) ─────────
+  //  Fichiers servis à /avatars/class/<nom>.png (dossier client/ servi à la racine).
+  const PRESETS_CLASS = [
+    { name: 'Chasseur de démons — Dévoreur', url: '/avatars/class/dh-devourer.png' },
+    { name: 'Chasseur de démons — Dévastation', url: '/avatars/class/dh-havoc.png' },
+    { name: 'Chasseur de démons — Vengeance', url: '/avatars/class/dh-vengeance.png' },
+    { name: 'Chevalier de la mort — Sang', url: '/avatars/class/dk-blood.png' },
+    { name: 'Chevalier de la mort — Givre', url: '/avatars/class/dk-frost.png' },
+    { name: 'Chevalier de la mort — Impie', url: '/avatars/class/dk-unholy.png' },
+    { name: 'Druide — Équilibre', url: '/avatars/class/druid-balance.png' },
+    { name: 'Druide — Gardien', url: '/avatars/class/druid-bear.png' },
+    { name: 'Druide — Farouche', url: '/avatars/class/druid-feral.png' },
+    { name: 'Druide — Restauration', url: '/avatars/class/druid-resto.png' },
+    { name: 'Évocateur — Augmentation', url: '/avatars/class/evoker-aug.png' },
+    { name: 'Évocateur — Dévastation', url: '/avatars/class/evoker-dev.png' },
+    { name: 'Évocateur — Préservation', url: '/avatars/class/evoker-pres.png' },
+    { name: 'Chasseur — Maîtrise des bêtes', url: '/avatars/class/hunter-beastmaster.png' },
+    { name: 'Chasseur — Précision', url: '/avatars/class/hunter-marksman.png' },
+    { name: 'Chasseur — Survie', url: '/avatars/class/hunter-survival.png' },
+    { name: 'Mage — Arcane', url: '/avatars/class/mage-arcane.png' },
+    { name: 'Mage — Feu', url: '/avatars/class/mage-fire.png' },
+    { name: 'Mage — Givre', url: '/avatars/class/mage-frost.png' },
+    { name: 'Moine — Maître brasseur', url: '/avatars/class/monk-brew.png' },
+    { name: 'Moine — Tisse-brume', url: '/avatars/class/monk-mw.png' },
+    { name: 'Moine — Marche-vent', url: '/avatars/class/monk-ww.png' },
+    { name: 'Paladin — Sacré', url: '/avatars/class/paladin-holy.png' },
+    { name: 'Paladin — Protection', url: '/avatars/class/paladin-prot.png' },
+    { name: 'Paladin — Vindicte', url: '/avatars/class/paladin-ret.png' },
+    { name: 'Prêtre — Discipline', url: '/avatars/class/priest-disc.png' },
+    { name: 'Prêtre — Sacré', url: '/avatars/class/priest-holy.png' },
+    { name: 'Prêtre — Ombre', url: '/avatars/class/priest-shadow.png' },
+    { name: 'Voleur — Assassinat', url: '/avatars/class/rogue-assasin.png' },
+    { name: 'Voleur — Hors-la-loi', url: '/avatars/class/rogue-outlaw.png' },
+    { name: 'Voleur — Finesse', url: '/avatars/class/rogue-sub.png' },
+    { name: 'Chaman — Élémentaire', url: '/avatars/class/shaman-ele.png' },
+    { name: 'Chaman — Amélioration', url: '/avatars/class/shaman-enhance.png' },
+    { name: 'Chaman — Restauration', url: '/avatars/class/shaman-resto.png' },
+    { name: 'Démoniste — Affliction', url: '/avatars/class/warlock-aff.png' },
+    { name: 'Démoniste — Démonologie', url: '/avatars/class/warlock-demo.png' },
+    { name: 'Démoniste — Destruction', url: '/avatars/class/warlock-destro.png' },
+    { name: 'Guerrier — Armes', url: '/avatars/class/warrior-arms.png' },
+    { name: 'Guerrier — Fureur', url: '/avatars/class/warrior-fury.png' },
+    { name: 'Guerrier — Protection', url: '/avatars/class/warrior-prot.png' },
+  ];
+
+  const AVATAR_PRESETS = [...PRESETS_CUSTOM, ...PRESETS_CLASS, ...PRESETS_GENERATED];
 
   // ── Galerie de bannières prédéfinies ───────────────────────────────────────
   //  Dégradés générés en SVG (data-URI) : aucune image à héberger, aucun droit
