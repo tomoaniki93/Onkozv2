@@ -127,13 +127,10 @@ const Profile = (() => {
 
       <div class="flex flex-col gap-4 p-4 overflow-y-auto">
 
-        <!-- Aperçu bannière + avatar -->
-        <div class="relative rounded-lg overflow-hidden h-20 bg-onkoz-deep border border-onkoz-border">
-          <div id="edit-banner-preview" class="absolute inset-0 bg-gradient-to-br from-onkoz-accent/30 to-onkoz-deep bg-cover bg-center"></div>
-          <div class="absolute bottom-0 left-4 translate-y-1/2">
-            <div id="edit-avatar-preview" class="w-12 h-12 rounded-full border-4 border-onkoz-surface flex items-center justify-center font-bold text-lg text-white uppercase bg-onkoz-accent overflow-hidden">
-              ${me.username[0]}
-            </div>
+        <!-- Aperçu avatar -->
+        <div class="flex justify-center py-2">
+          <div id="edit-avatar-preview" class="w-20 h-20 rounded-full border-4 border-onkoz-surface bg-onkoz-accent flex items-center justify-center font-bold text-3xl text-white uppercase overflow-hidden bg-cover bg-center">
+            ${me.username[0]}
           </div>
         </div>
 
@@ -162,15 +159,6 @@ const Profile = (() => {
                    class="bg-onkoz-deep border border-onkoz-border rounded-md px-3 py-2 text-sm outline-none focus:border-onkoz-accent transition-colors" />
             <span class="text-[0.68rem] text-onkoz-text-muted">ou choisis-en un :</span>
             <div id="avatar-presets" class="grid grid-cols-6 gap-1.5 mt-0.5"></div>
-          </div>
-
-          <!-- Bannière URL -->
-          <div class="flex flex-col gap-1">
-            <label class="text-[0.72rem] font-bold uppercase tracking-wider text-onkoz-text-muted">🏙 URL Bannière</label>
-            <input id="edit-banner-url" type="url" placeholder="https://..."
-                   class="bg-onkoz-deep border border-onkoz-border rounded-md px-3 py-2 text-sm outline-none focus:border-onkoz-accent transition-colors" />
-            <span class="text-[0.68rem] text-onkoz-text-muted">ou choisis-en une :</span>
-            <div id="banner-presets" class="grid grid-cols-4 gap-1.5 mt-0.5"></div>
           </div>
 
         </div>
@@ -207,12 +195,10 @@ const Profile = (() => {
     const statusInput   = document.getElementById('edit-status');
     const bioInput      = document.getElementById('edit-bio');
     const avatarInput   = document.getElementById('edit-avatar-url');
-    const bannerInput   = document.getElementById('edit-banner-url');
 
     statusInput.value = saved.status  || '';
     bioInput.value    = saved.bio     || '';
     avatarInput.value = saved.avatar_url || '';
-    bannerInput.value = saved.banner_url || '';
 
     document.getElementById('status-count').textContent = statusInput.value.length;
     document.getElementById('bio-count').textContent    = bioInput.value.length;
@@ -220,9 +206,7 @@ const Profile = (() => {
     // Aperçu en temps réel
     function updatePreview() {
       const avatarPrev = document.getElementById('edit-avatar-preview');
-      const bannerPrev = document.getElementById('edit-banner-preview');
       const av = avatarInput.value.trim();
-      const bn = bannerInput.value.trim();
       if (av) {
         avatarPrev.style.backgroundImage = `url("${av}")`;
         avatarPrev.style.backgroundSize  = 'cover';
@@ -231,13 +215,6 @@ const Profile = (() => {
       } else {
         avatarPrev.style.backgroundImage = '';
         avatarPrev.textContent = me.username[0];
-      }
-      if (bn) {
-        bannerPrev.style.backgroundImage = `url("${bn}")`;
-        bannerPrev.style.backgroundSize  = 'cover';
-        bannerPrev.style.backgroundPosition = 'center';
-      } else {
-        bannerPrev.style.backgroundImage = '';
       }
     }
 
@@ -248,7 +225,6 @@ const Profile = (() => {
       document.getElementById('bio-count').textContent = bioInput.value.length;
     });
     avatarInput.addEventListener('input', updatePreview);
-    bannerInput.addEventListener('input', updatePreview);
     updatePreview();
 
     // ── Galerie d'avatars prédéfinis ──
@@ -275,31 +251,6 @@ const Profile = (() => {
           btn.classList.add('border-onkoz-accent');
         });
         presetGrid.appendChild(btn);
-      });
-    }
-
-    // ── Galerie de bannières prédéfinies ──
-    const bannerGrid = document.getElementById('banner-presets');
-    if (bannerGrid) {
-      bannerGrid.innerHTML = '';
-      ALL_BANNERS.forEach(b => {
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.title = b.name;
-        btn.className =
-          'h-8 rounded-md overflow-hidden border-2 border-transparent ' +
-          'hover:border-onkoz-accent focus:border-onkoz-accent transition-colors';
-        btn.style.backgroundImage    = `url("${b.url}")`;
-        btn.style.backgroundSize     = 'cover';
-        btn.style.backgroundPosition = 'center';
-        btn.addEventListener('click', () => {
-          bannerInput.value = b.url;
-          updatePreview();
-          bannerGrid.querySelectorAll('button').forEach(x =>
-            x.classList.remove('border-onkoz-accent'));
-          btn.classList.add('border-onkoz-accent');
-        });
-        bannerGrid.appendChild(btn);
       });
     }
 
@@ -373,16 +324,16 @@ const Profile = (() => {
   }
 
   async function saveProfile(panel) {
+    const me = Auth.getUser();
     const data = {
       status:     document.getElementById('edit-status').value.trim()     || null,
       bio:        document.getElementById('edit-bio').value.trim()        || null,
       avatar_url: document.getElementById('edit-avatar-url').value.trim() || null,
-      banner_url: document.getElementById('edit-banner-url').value.trim() || null,
+      banner_url: (cache[me.id]?.banner_url) || null,   // bannière conservée telle quelle
     };
 
     try {
       const updated = await API.updateProfile(data);
-      const me = Auth.getUser();
       cache[me.id] = { ...updated };
 
       // Émettre via socket pour mise à jour temps réel
