@@ -22,7 +22,7 @@ const UI = (() => {
     const div = document.createElement('div');
     div.className = `${avatarClass(username)} user-avatar w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm text-white shrink-0 uppercase overflow-hidden ${extraClasses}`;
     if (avatarUrl) {
-      div.style.backgroundImage    = `url(${avatarUrl})`;
+      div.style.backgroundImage    = `url("${avatarUrl}")`;
       div.style.backgroundSize     = 'cover';
       div.style.backgroundPosition = 'center';
     } else {

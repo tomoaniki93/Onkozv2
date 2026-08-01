@@ -88,6 +88,8 @@ const Profile = (() => {
       cache[data.userId] = data;
       refreshAvatarsInDOM(data);
       refreshStatusInDOM(data);
+      const me = Auth.getUser();
+      if (me && data.userId === me.id) applyFooterAvatar(data.avatar_url);
     });
   }
 
@@ -205,7 +207,7 @@ const Profile = (() => {
       const av = avatarInput.value.trim();
       const bn = bannerInput.value.trim();
       if (av) {
-        avatarPrev.style.backgroundImage = `url(${av})`;
+        avatarPrev.style.backgroundImage = `url("${av}")`;
         avatarPrev.style.backgroundSize  = 'cover';
         avatarPrev.style.backgroundPosition = 'center';
         avatarPrev.textContent = '';
@@ -214,7 +216,9 @@ const Profile = (() => {
         avatarPrev.textContent = me.username[0];
       }
       if (bn) {
-        bannerPrev.style.backgroundImage = `url(${bn})`;
+        bannerPrev.style.backgroundImage = `url("${bn}")`;
+        bannerPrev.style.backgroundSize  = 'cover';
+        bannerPrev.style.backgroundPosition = 'center';
       } else {
         bannerPrev.style.backgroundImage = '';
       }
@@ -367,6 +371,10 @@ const Profile = (() => {
       // Émettre via socket pour mise à jour temps réel
       socket?.emit('profile:update', data);
 
+      // Mise à jour immédiate de son propre avatar (sans attendre le socket)
+      refreshAvatarsInDOM({ userId: me.id, avatar_url: data.avatar_url });
+      applyFooterAvatar(data.avatar_url);
+
       panel.remove();
       AudioSettings.showToast('✅ Profil mis à jour');
 
@@ -404,7 +412,7 @@ const Profile = (() => {
     popup.style.left = `${Math.max(8, left)}px`;
 
     const bannerStyle = profile.banner_url
-      ? `background-image:url(${profile.banner_url});background-size:cover;background-position:center`
+      ? `background-image:url('${profile.banner_url}');background-size:cover;background-position:center`
       : 'background:linear-gradient(135deg,#5865f2 0%,#3b1f6b 100%)';
 
     const avatarHtml = profile.avatar_url
@@ -488,7 +496,7 @@ const Profile = (() => {
   function refreshAvatarsInDOM({ userId, avatar_url }) {
     document.querySelectorAll(`[data-user-id="${userId}"] .user-avatar`).forEach(el => {
       if (avatar_url) {
-        el.style.backgroundImage = `url(${avatar_url})`;
+        el.style.backgroundImage = `url("${avatar_url}")`;
         el.style.backgroundSize  = 'cover';
         el.style.backgroundPosition = 'center';
         el.textContent = '';
@@ -513,11 +521,30 @@ const Profile = (() => {
     el.classList.toggle('hidden', !status);
   }
 
+  // Applique l'avatar personnalisé sur la pastille du footer (bas gauche)
+  function applyFooterAvatar(avatar_url) {
+    const av = document.getElementById('footer-avatar');
+    if (!av) return;
+    if (avatar_url) {
+      av.style.backgroundImage    = `url("${avatar_url}")`;
+      av.style.backgroundSize     = 'cover';
+      av.style.backgroundPosition = 'center';
+      av.textContent = '';
+    } else {
+      av.style.backgroundImage = '';
+      const me = Auth.getUser();
+      av.textContent = (me?.username?.[0] || '?').toUpperCase();
+    }
+  }
+
   // ── Précharger les profils depuis la liste utilisateurs ───────────────────
   function preloadProfiles(users) {
     users.forEach(u => {
       cache[u.id] = u;
     });
+    // Appliquer son propre avatar au footer (le /me ne renvoie pas avatar_url)
+    const me = Auth.getUser();
+    if (me && cache[me.id]) applyFooterAvatar(cache[me.id].avatar_url);
   }
 
   return { init, openEditPanel, openProfilePopup, preloadProfiles };
