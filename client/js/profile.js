@@ -51,7 +51,10 @@ const Profile = (() => {
       `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="150">` +
       `<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">${stops}</linearGradient></defs>` +
       `<rect width="600" height="150" fill="url(#g)"/></svg>`;
-    return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+    // encodeURIComponent laisse ( ) littéraux → ils casseraient le url() CSS.
+    // On les encode aussi pour que le data-URI fonctionne dans un url() non quoté.
+    const enc = encodeURIComponent(svg).replace(/\(/g, '%28').replace(/\)/g, '%29');
+    return `data:image/svg+xml,${enc}`;
   };
 
   const BANNER_PRESETS = [
