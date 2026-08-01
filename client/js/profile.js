@@ -6,39 +6,56 @@
 const Profile = (() => {
 
   // ── Galerie d'avatars prédéfinis ───────────────────────────────────────────
-  //  Chaque entrée : { name, url }. Cliquer une vignette remplit le champ Avatar.
-  //
-  //  • DiceBear : avatars générés, libres de droits, aucune image à héberger.
-  //    Change le `seed=` pour varier le rendu. Styles dispo : adventurer,
-  //    bottts, thumbs, fun-emoji, pixel-art, etc. (https://www.dicebear.com)
-  //
-  //  • Tes propres images (ex. visuels que TU as le droit d'utiliser) : héberge-les
-  //    sur le VPS dans /avatars/ et ajoute-les dans PRESETS_CUSTOM ci-dessous.
-  //    Ne hotlink pas d'artworks sous droits (Blizzard, etc.) : héberge des
-  //    fichiers dont tu as l'autorisation, sinon le rendu casse et c'est risqué.
-  const DB = (style, seed) =>
-    `https://api.dicebear.com/9.x/${style}/svg?seed=${encodeURIComponent(seed)}`;
+  //  Avatars générés en SVG (data-URI) : aucune dépendance externe, aucun droit
+  //  en jeu, la galerie s'affiche toujours (même hors-ligne). Dégradé + symbole.
+  const AV = (c1, c2, glyph) => {
+    const svg =
+      `<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120" viewBox="0 0 120 120">` +
+      `<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">` +
+      `<stop offset="0" stop-color="${c1}"/><stop offset="1" stop-color="${c2}"/>` +
+      `</linearGradient></defs>` +
+      `<rect width="120" height="120" fill="url(#g)"/>` +
+      `<g fill="#ffffff" fill-opacity="0.92" stroke="#ffffff" stroke-opacity="0.92">${glyph}</g>` +
+      `</svg>`;
+    const enc = encodeURIComponent(svg).replace(/\(/g, '%28').replace(/\)/g, '%29');
+    return `data:image/svg+xml,${enc}`;
+  };
 
-  const PRESETS_DICEBEAR = [
-    { name: 'Aventurier 1', url: DB('adventurer', 'Aragorn') },
-    { name: 'Aventurier 2', url: DB('adventurer', 'Valeera') },
-    { name: 'Aventurier 3', url: DB('adventurer', 'Thrall') },
-    { name: 'Aventurier 4', url: DB('adventurer', 'Jaina') },
-    { name: 'Robot 1',      url: DB('bottts', 'Mekgineer') },
-    { name: 'Robot 2',      url: DB('bottts', 'Gnomeregan') },
-    { name: 'Pixel 1',      url: DB('pixel-art', 'Ragnaros') },
-    { name: 'Pixel 2',      url: DB('pixel-art', 'Illidan') },
-    { name: 'Emoji 1',      url: DB('fun-emoji', 'Murloc') },
-    { name: 'Emoji 2',      url: DB('fun-emoji', 'Peon') },
-    { name: 'Pouce 1',      url: DB('thumbs', 'Azeroth') },
-    { name: 'Pouce 2',      url: DB('thumbs', 'Kalimdor') },
+  const G = {
+    circle:   '<circle cx="60" cy="60" r="28" stroke="none"/>',
+    ring:     '<circle cx="60" cy="60" r="24" fill="none" stroke-width="9"/>',
+    square:   '<rect x="34" y="34" width="52" height="52" rx="13" stroke="none"/>',
+    diamond:  '<path d="M60 30 L90 60 L60 90 L30 60 Z" stroke="none"/>',
+    triangle: '<path d="M60 34 L86 82 L34 82 Z" stroke="none"/>',
+    hexagon:  '<path d="M60 30 L86 45 L86 75 L60 90 L34 75 L34 45 Z" stroke="none"/>',
+    pentagon: '<path d="M60 30 L88 51 L77 84 L43 84 L32 51 Z" stroke="none"/>',
+    plus:     '<path d="M52 32 L68 32 L68 52 L88 52 L88 68 L68 68 L68 88 L52 88 L52 68 L32 68 L32 52 L52 52 Z" stroke="none"/>',
+    bolt:     '<path d="M66 30 L42 62 L57 62 L54 90 L80 56 L63 56 Z" stroke="none"/>',
+    droplet:  '<path d="M60 32 C80 56 78 70 60 88 C42 70 40 56 60 32 Z" stroke="none"/>',
+    crescent: '<path d="M74 32 A28 28 0 1 0 74 88 A22 22 0 1 1 74 32 Z" stroke="none"/>',
+    dots:     '<circle cx="46" cy="60" r="12" stroke="none"/><circle cx="74" cy="60" r="12" stroke="none"/>',
+  };
+
+  const PRESETS_GENERATED = [
+    { name: 'Saphir',    url: AV('#1e3a8a', '#38bdf8', G.circle) },
+    { name: 'Rubis',     url: AV('#7f1d1d', '#f87171', G.diamond) },
+    { name: 'Arcane',    url: AV('#4c1d95', '#c084fc', G.hexagon) },
+    { name: 'Émeraude',  url: AV('#064e3b', '#34d399', G.triangle) },
+    { name: 'Givre',     url: AV('#0e7490', '#67e8f9', G.crescent) },
+    { name: 'Braise',    url: AV('#7c2d12', '#fb923c', G.bolt) },
+    { name: 'Or',        url: AV('#78350f', '#fbbf24', G.pentagon) },
+    { name: 'Sang',      url: AV('#450a0a', '#ef4444', G.droplet) },
+    { name: 'Améthyste', url: AV('#2e1065', '#a78bfa', G.square) },
+    { name: 'Océan',     url: AV('#0c4a6e', '#22d3ee', G.ring) },
+    { name: 'Fel',       url: AV('#14532d', '#4ade80', G.plus) },
+    { name: 'Nocturne',  url: AV('#0f172a', '#64748b', G.dots) },
   ];
 
   // Ajoute ici tes propres avatars hébergés sur le VPS, ex :
   //   { name: 'Guerrier', url: 'https://onkoz.fr/avatars/guerrier.png' },
   const PRESETS_CUSTOM = [];
 
-  const AVATAR_PRESETS = [...PRESETS_CUSTOM, ...PRESETS_DICEBEAR];
+  const AVATAR_PRESETS = [...PRESETS_CUSTOM, ...PRESETS_GENERATED];
 
   // ── Galerie de bannières prédéfinies ───────────────────────────────────────
   //  Dégradés générés en SVG (data-URI) : aucune image à héberger, aucun droit
