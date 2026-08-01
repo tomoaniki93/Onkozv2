@@ -323,7 +323,7 @@ function setupSocketHandlers(io) {
 
     socket.on('profile:update', ({ bio, status, avatar_url, banner_url }) => {
       // Mettre à jour en DB
-      const isValidUrl = u => { try { new URL(u); return true; } catch { return false; } };
+      const isValidUrl = u => { if (typeof u !== 'string') return false; if (u.startsWith('/')) return true; try { new URL(u); return true; } catch { return false; } };
       if (bio    !== undefined && bio    !== null && bio.length    > 200) return;
       if (status !== undefined && status !== null && status.length >  50) return;
       if (avatar_url && !isValidUrl(avatar_url)) return;

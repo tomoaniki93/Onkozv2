@@ -29,7 +29,7 @@ router.patch('/me/profile', requireAuth, (req, res) => {
   if (bio    !== undefined && bio    !== null && bio.length    > 200) return res.status(400).json({ error: 'Bio max 200 caractères' });
   if (status !== undefined && status !== null && status.length >  50) return res.status(400).json({ error: 'Statut max 50 caractères' });
 
-  const isValidUrl = u => { try { new URL(u); return true; } catch { return false; } };
+  const isValidUrl = u => { if (typeof u !== 'string') return false; if (u.startsWith('/')) return true; try { new URL(u); return true; } catch { return false; } };
   if (avatar_url && !isValidUrl(avatar_url)) return res.status(400).json({ error: 'URL avatar invalide' });
   if (banner_url && !isValidUrl(banner_url)) return res.status(400).json({ error: 'URL bannière invalide' });
 

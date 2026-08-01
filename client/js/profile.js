@@ -102,6 +102,56 @@ const Profile = (() => {
 
   const AVATAR_PRESETS = [...PRESETS_CUSTOM, ...PRESETS_CLASS, ...PRESETS_GENERATED];
 
+  // ── Couleurs officielles des classes WoW (fond des icônes) ──────────────────
+  const CLASS_COLORS = {
+    dh: '#A330C9', dk: '#C41E3A', druid: '#FF7C0A', evoker: '#33937F',
+    hunter: '#AAD372', mage: '#3FC7EB', monk: '#00FF98', paladin: '#F48CBA',
+    priest: '#8f9aa8', rogue: '#FFF468', shaman: '#0070DD', warlock: '#8788EE',
+    warrior: '#C69B6D',
+  };
+
+  // Renvoie la couleur de classe si l'URL est une icône de classe, sinon null
+  function classColorFromUrl(url) {
+    const m = /\/avatars\/class\/([a-z]+)-/.exec(url || '');
+    return m ? (CLASS_COLORS[m[1]] || null) : null;
+  }
+
+  function darken(hex, f) {
+    const n = parseInt(hex.slice(1), 16);
+    const r = Math.round(((n >> 16) & 255) * f);
+    const g = Math.round(((n >> 8) & 255) * f);
+    const b = Math.round((n & 255) * f);
+    return `rgb(${r},${g},${b})`;
+  }
+
+  // Compose l'icône (transparente) sur un fond dégradé coloré → data-URI PNG.
+  // Le data-URI résultant est une image autonome (passe la validation serveur).
+  function bakeClassAvatar(url, color) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const S = 128, c = document.createElement('canvas');
+          c.width = c.height = S;
+          const ctx = c.getContext('2d');
+          const g = ctx.createLinearGradient(0, 0, S, S);
+          g.addColorStop(0, darken(color, 0.55));
+          g.addColorStop(1, color);
+          ctx.fillStyle = g;
+          ctx.fillRect(0, 0, S, S);
+          // Ombre douce pour garder l'icône blanche lisible sur les couleurs claires
+          ctx.shadowColor = 'rgba(0,0,0,0.5)';
+          ctx.shadowBlur = 9;
+          const pad = 18, d = S - pad * 2;
+          ctx.drawImage(img, pad, pad, d, d);
+          resolve(c.toDataURL('image/png'));
+        } catch (e) { reject(e); }
+      };
+      img.onerror = reject;
+      img.src = url;   // même origine → pas de taint canvas
+    });
+  }
+
   // ── Galerie de bannières prédéfinies ───────────────────────────────────────
   //  Dégradés générés en SVG (data-URI) : aucune image à héberger, aucun droit
   //  en jeu, une URL valide utilisable telle quelle dans banner_url.
@@ -281,6 +331,7 @@ const Profile = (() => {
       presetGrid.style.gridTemplateColumns = 'repeat(6, 1fr)';
       presetGrid.style.gap = '6px';
       AVATAR_PRESETS.forEach(p => {
+        const classColor = classColorFromUrl(p.url);
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.title = p.name;
@@ -290,14 +341,34 @@ const Profile = (() => {
         btn.style.aspectRatio = '1 / 1';
         btn.style.width = '100%';
         btn.style.padding = '0';
-        btn.innerHTML =
-          `<img src="${p.url}" alt="${p.name}" loading="lazy" ` +
-          `style="width:100%;height:100%;object-fit:cover;display:block;pointer-events:none" ` +
-          `onerror="this.parentElement.style.display='none'">`;
-        btn.addEventListener('click', () => {
-          avatarInput.value = p.url;
+
+        if (classColor) {
+          // Icône de classe : fond coloré + icône centrée avec marge
+          btn.style.background = `linear-gradient(135deg, ${darken(classColor, 0.55)}, ${classColor})`;
+          btn.innerHTML =
+            `<img src="${p.url}" alt="${p.name}" loading="lazy" ` +
+            `style="width:82%;height:82%;margin:9%;object-fit:contain;display:block;` +
+            `pointer-events:none;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5))" ` +
+            `onerror="this.parentElement.style.display='none'">`;
+        } else {
+          btn.innerHTML =
+            `<img src="${p.url}" alt="${p.name}" loading="lazy" ` +
+            `style="width:100%;height:100%;object-fit:cover;display:block;pointer-events:none" ` +
+            `onerror="this.parentElement.style.display='none'">`;
+        }
+
+        btn.addEventListener('click', async () => {
+          // Icône de classe → composer sur fond coloré (data-URI). Sinon URL directe.
+          if (classColor) {
+            try {
+              avatarInput.value = await bakeClassAvatar(p.url, classColor);
+            } catch {
+              avatarInput.value = p.url;   // repli : icône brute
+            }
+          } else {
+            avatarInput.value = p.url;
+          }
           updatePreview();
-          // Met en évidence la sélection courante
           presetGrid.querySelectorAll('button').forEach(b =>
             b.classList.remove('border-onkoz-accent'));
           btn.classList.add('border-onkoz-accent');
