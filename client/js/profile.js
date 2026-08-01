@@ -231,16 +231,23 @@ const Profile = (() => {
     const presetGrid = document.getElementById('avatar-presets');
     if (presetGrid) {
       presetGrid.innerHTML = '';
+      // Grille forcée en inline (les classes Tailwind grid-cols-* peuvent être purgées)
+      presetGrid.style.display = 'grid';
+      presetGrid.style.gridTemplateColumns = 'repeat(6, 1fr)';
+      presetGrid.style.gap = '6px';
       AVATAR_PRESETS.forEach(p => {
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.title = p.name;
         btn.className =
-          'aspect-square rounded-md overflow-hidden border-2 border-transparent ' +
+          'rounded-md overflow-hidden border-2 border-transparent ' +
           'hover:border-onkoz-accent focus:border-onkoz-accent transition-colors bg-onkoz-deep';
+        btn.style.aspectRatio = '1 / 1';
+        btn.style.width = '100%';
+        btn.style.padding = '0';
         btn.innerHTML =
           `<img src="${p.url}" alt="${p.name}" loading="lazy" ` +
-          `class="w-full h-full object-cover pointer-events-none" ` +
+          `style="width:100%;height:100%;object-fit:cover;display:block;pointer-events:none" ` +
           `onerror="this.parentElement.style.display='none'">`;
         btn.addEventListener('click', () => {
           avatarInput.value = p.url;
