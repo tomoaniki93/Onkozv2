@@ -136,6 +136,9 @@ const Voice = (() => {
       // Démarrer la détection speaking sur le micro local
       startSelfSpeakingDetection(processedStream);
 
+      // Si le mode push-to-talk est actif, démarrer micro fermé
+      window.Hotkeys?.applyMode();
+
       // 7. Transport de réception
       const recvParams = await socketEmit('ms:createTransport', { roomId });
       recvTransport = device.createRecvTransport(recvParams);
@@ -290,14 +293,21 @@ const Voice = (() => {
   //  MUTE / UNMUTE
   // ═══════════════════════════════════════════════════════════════════════════
   function toggleMute() {
-    isMuted = !isMuted;
+    setMuted(!isMuted);
+  }
+
+  /** Mute explicite et idempotent — utilisé par le push-to-talk. */
+  function setMuted(muted) {
+    muted = !!muted;
+    if (muted === isMuted) return;
+    isMuted = muted;
 
     // Pause/resume au niveau mediasoup (coupe l'envoi RTP)
     if (producer) {
       isMuted ? producer.pause() : producer.resume();
     }
 
-    // ✅ PATCH — Muter la piste traitée (celle que mediasoup utilise)
+    // Muter la piste traitée (celle que mediasoup utilise)
     processedStream?.getAudioTracks().forEach(t => { t.enabled = !isMuted; });
 
     // Garder localStream en sync
@@ -1151,6 +1161,8 @@ const Voice = (() => {
     joinRoom,
     leaveRoom,
     toggleMute,
+    setMuted,
+    getMuted: () => isMuted,
     setPeerVolume,
     getPeerVolume,
     toggleScreenShare,

@@ -701,6 +701,8 @@ const App = (() => {
       if (e.key === 'Escape') { closeSidebar(); closeMobileMembers(); }
       if (e.key === 'v' && e.altKey) { e.preventDefault(); Voice.toggleOverlay(); }
     });
+
+    window.Hotkeys?.init();
   }
 
   // ── Fonctions mobile ──────────────────────────────────────────────────────

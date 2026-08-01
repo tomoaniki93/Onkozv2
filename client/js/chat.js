@@ -598,6 +598,7 @@ const Chat = (() => {
     initImageUpload();
     initLightbox();
     initPinnedPanel();
+    window.Whisper?.init(socket);
   }
 
   // ── DM ────────────────────────────────────────────────────────────────────
@@ -639,6 +640,9 @@ const Chat = (() => {
   }
 
   function onDMMessage(msg) {
+    // Si une fenêtre de chuchotement gère cet interlocuteur, elle absorbe le message
+    if (window.Whisper?.receive(msg)) return;
+
     const me = Auth.getUser();
     const panel = document.getElementById('dm-panel');
     if (!panel.classList.contains('hidden') && (msg.from_id === dmPartnerId || msg.to_id === dmPartnerId)) {
