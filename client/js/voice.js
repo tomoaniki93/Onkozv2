@@ -16,6 +16,8 @@ const Voice = (() => {
   let recvTransport = null;
   let producer      = null;
   let consumers     = new Map(); // peerId → consumer audio
+  let peerAudioEls  = new Map(); // peerId → HTMLAudioElement (pour volume par pair)
+  let peerUserMap   = new Map(); // peerId → userId (index stable du volume)
   let localStream   = null;     // stream brut (micro)
   let processedStream = null;   // stream après NoiseReducer (envoyé à mediasoup)
   let isMuted       = false;
@@ -152,7 +154,7 @@ const Voice = (() => {
         const queued = [...pendingPeers];
         pendingPeers = [];
         for (const p of queued) {
-          addPeerToUI(p.peerId, p.username);
+          addPeerToUI(p.peerId, p.username, p.userId);
           await handleNewProducer(p);
         }
       }
@@ -169,9 +171,9 @@ const Voice = (() => {
   // ═══════════════════════════════════════════════════════════════════════════
   //  CONSOMMER UN PRODUCER DISTANT
   // ═══════════════════════════════════════════════════════════════════════════
-  async function handleNewProducer({ peerId, producerId, username, appData }) {
+  async function handleNewProducer({ peerId, producerId, username, userId, appData }) {
     if (!recvTransport || !device) {
-      pendingPeers.push({ peerId, producerId, username, appData });
+      pendingPeers.push({ peerId, producerId, username, userId, appData });
       return;
     }
     try {
@@ -191,12 +193,15 @@ const Voice = (() => {
       } else {
         // ── Flux audio ──
         consumers.set(peerId, consumer);
+        if (userId != null) rememberPeerUser(peerId, userId);
         const audio = new Audio();
         audio.srcObject = new MediaStream([consumer.track]);
-        const vol = parseInt(localStorage.getItem('onkoz_volume') || '100') / 100;
-        audio.volume = vol;
+        const master  = parseInt(localStorage.getItem('onkoz_volume') || '100') / 100;
+        const perUser = getPeerVolume(peerId);            // 0..1, défaut 1
+        audio.volume = Math.min(1, master * perUser);
         audio.play().catch(console.warn);
-        addPeerToUI(peerId, username);
+        peerAudioEls.set(peerId, audio);                  // pour ajuster le volume plus tard
+        addPeerToUI(peerId, username, userId);
         // Démarrer la détection speaking sur ce pair
         startPeerSpeakingDetection(peerId, consumer.track);
       }
@@ -253,6 +258,9 @@ const Voice = (() => {
     screenConsumers.forEach(c => c.close());
     consumers.clear();
     screenConsumers.clear();
+    peerAudioEls.clear();
+    peerUserMap.clear();
+    document.getElementById('peer-vol-pop')?.remove();
 
     // Réinitialiser l'état
     producer = sendTransport = recvTransport = device = null;
@@ -959,18 +967,26 @@ const Voice = (() => {
     }
   }
 
-  function addPeerToUI(peerId, username) {
+  function addPeerToUI(peerId, username, userId) {
+    if (userId != null) rememberPeerUser(peerId, userId);
     if (document.getElementById(`vp-${peerId}`)) return;
     const container = document.getElementById('voice-peers-container');
     if (!container) return;
 
     const peer = document.createElement('div');
     peer.id = `vp-${peerId}`;
-    peer.className = 'voice-peer flex flex-col items-center gap-2 px-4 py-3 bg-onkoz-surface rounded-xl min-w-[80px] transition-all';
+    peer.className = 'voice-peer flex flex-col items-center gap-2 px-4 py-3 bg-onkoz-surface rounded-xl min-w-[80px] transition-all relative cursor-pointer';
     peer.innerHTML = `
       <div class="${UI.avatarClass(username)} w-12 h-12 rounded-full flex items-center justify-center text-xl font-bold text-white uppercase">${username[0]}</div>
       <span class="text-[0.8rem] text-onkoz-text-md text-center">${username}</span>`;
     container.appendChild(peer);
+
+    // Clic sur la tuile → réglage du volume de ce pair
+    peer.addEventListener('click', (e) => {
+      e.stopPropagation();
+      togglePeerVolumePopover(peerId, username, peer);
+    });
+
     overlayAddMember(peerId, username);
     window.ElectronAPI?.overlayUpdate({ type: 'add', peerId, username });
   }
@@ -982,6 +998,9 @@ const Voice = (() => {
     window.ElectronAPI?.overlayUpdate({ type: 'remove', peerId });
     consumers.get(peerId)?.close();
     consumers.delete(peerId);
+    peerAudioEls.delete(peerId);
+    peerUserMap.delete(peerId);
+    document.getElementById('peer-vol-pop')?.remove();
     // Fermer l'overlay de partage d'écran si ce pair partageait
     document.getElementById(`screen-overlay-${peerId}`)?.remove();
     screenConsumers.get(peerId)?.close();
@@ -1019,8 +1038,8 @@ const Voice = (() => {
   // ═══════════════════════════════════════════════════════════════════════════
   //  EVENTS SOCKET ENTRANTS
   // ═══════════════════════════════════════════════════════════════════════════
-  function onPeerJoined({ peerId, username }) {
-    addPeerToUI(peerId, username);
+  function onPeerJoined({ peerId, username, userId }) {
+    addPeerToUI(peerId, username, userId);
     announce(username, 'join');
   }
 
@@ -1033,7 +1052,7 @@ const Voice = (() => {
 
   function onExistingPeers(peers) {
     // UI seulement — les producers arrivent via ms:existingProducers
-    peers.forEach(p => addPeerToUI(p.peerId, p.username));
+    peers.forEach(p => addPeerToUI(p.peerId, p.username, p.userId));
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -1047,12 +1066,93 @@ const Voice = (() => {
     });
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  VOLUME PAR PAIR
+  //  Réduit (0–100 %) le son d'un pair individuellement. Persistant par userId.
+  // ═══════════════════════════════════════════════════════════════════════════
+  function rememberPeerUser(peerId, userId) { peerUserMap.set(peerId, userId); }
+
+  function volKey(userId) { return `onkoz_uvol_${userId}`; }
+
+  /** Volume mémorisé pour un pair, dans [0, 1]. Défaut : 1 (100 %). */
+  function getPeerVolume(peerId) {
+    const uid = peerUserMap.get(peerId);
+    if (uid == null) return 1;
+    const raw = localStorage.getItem(volKey(uid));
+    if (raw == null) return 1;
+    const v = parseFloat(raw);
+    return isNaN(v) ? 1 : Math.max(0, Math.min(1, v));
+  }
+
+  /** Applique et mémorise le volume d'un pair. `value` dans [0, 1]. */
+  function setPeerVolume(peerId, value) {
+    value = Math.max(0, Math.min(1, value));
+    const uid = peerUserMap.get(peerId);
+    if (uid != null) localStorage.setItem(volKey(uid), String(value));
+    const audio = peerAudioEls.get(peerId);
+    if (audio) {
+      const master = parseInt(localStorage.getItem('onkoz_volume') || '100') / 100;
+      audio.volume = Math.min(1, master * value);
+    }
+  }
+
+  /** Popover de réglage du volume, ancré sous la tuile du pair. */
+  function togglePeerVolumePopover(peerId, username, anchor) {
+    const already = document.getElementById('peer-vol-pop');
+    const wasMine = already && already.dataset.peer === String(peerId);
+    already?.remove();
+    if (wasMine) return;   // re-clic sur le même pair = fermeture
+
+    const pop = document.createElement('div');
+    pop.id = 'peer-vol-pop';
+    pop.dataset.peer = String(peerId);
+    pop.className =
+      'absolute left-1/2 -translate-x-1/2 top-full mt-1 z-[60] p-2.5 w-44 ' +
+      'bg-onkoz-surface border border-onkoz-border rounded-lg shadow-dm flex flex-col gap-1.5';
+
+    const cur = Math.round(getPeerVolume(peerId) * 100);
+    pop.innerHTML = `
+      <div class="flex items-center justify-between">
+        <span class="text-[0.72rem] font-semibold text-onkoz-text truncate">${username}</span>
+        <span class="pv-val text-[0.72rem] text-onkoz-text-muted font-mono">${cur}%</span>
+      </div>
+      <input type="range" min="0" max="100" step="5" value="${cur}"
+             class="pv-range w-full accent-onkoz-accent">
+      <div class="flex gap-1">
+        <button class="pv-reset flex-1 text-[0.68rem] py-0.5 rounded border border-onkoz-border
+                hover:bg-onkoz-hover text-onkoz-text-muted transition-colors">Réinit.</button>
+        <button class="pv-mute flex-1 text-[0.68rem] py-0.5 rounded border border-onkoz-border
+                hover:bg-onkoz-hover text-onkoz-text-muted transition-colors">Couper</button>
+      </div>`;
+
+    anchor.appendChild(pop);
+
+    const range = pop.querySelector('.pv-range');
+    const val   = pop.querySelector('.pv-val');
+    const apply = v => { range.value = v; val.textContent = `${v}%`; setPeerVolume(peerId, v / 100); };
+
+    range.addEventListener('input', e => { e.stopPropagation(); apply(parseInt(e.target.value, 10)); });
+    pop.querySelector('.pv-reset').addEventListener('click', e => { e.stopPropagation(); apply(100); });
+    pop.querySelector('.pv-mute').addEventListener('click',  e => { e.stopPropagation(); apply(0); });
+    pop.addEventListener('click', e => e.stopPropagation());
+
+    // Fermeture au clic extérieur
+    setTimeout(() => {
+      const off = ev => {
+        if (!pop.contains(ev.target)) { pop.remove(); document.removeEventListener('click', off); }
+      };
+      document.addEventListener('click', off);
+    }, 0);
+  }
+
   // ── API publique ────────────────────────────────────────────────────────────
   return {
     init,
     joinRoom,
     leaveRoom,
     toggleMute,
+    setPeerVolume,
+    getPeerVolume,
     toggleScreenShare,
     onPeerJoined,
     onPeerLeft,

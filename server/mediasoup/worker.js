@@ -247,7 +247,7 @@ function getExistingProducers(roomId) {
   for (const [peerId, producerMap] of room.producers.entries()) {
     for (const [producerId, { kind, appData }] of producerMap.entries()) {
       const peer = room.peers.get(peerId);
-      result.push({ peerId, producerId, kind, appData, username: peer?.username || '' });
+      result.push({ peerId, producerId, kind, appData, username: peer?.username || '', userId: peer?.userId ?? null });
     }
   }
   return result;

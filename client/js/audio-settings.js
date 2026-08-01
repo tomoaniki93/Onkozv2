@@ -233,6 +233,17 @@ const AudioSettings = (() => {
 
     document.body.appendChild(panel);
 
+    // ── Section raccourcis micro ──
+    const scroll = panel.querySelector('#btn-save-audio')?.parentElement;
+    if (scroll) {
+      const sep = document.createElement('div');
+      sep.className = 'border-t border-onkoz-border';
+      scroll.insertBefore(sep, scroll.querySelector('#btn-save-audio'));
+      const host = document.createElement('div');
+      scroll.insertBefore(host, scroll.querySelector('#btn-save-audio'));
+      Hotkeys.mountSection(host);
+    }
+
     // Événements
     document.getElementById('close-audio-panel').addEventListener('click', closePanel);
     document.getElementById('btn-save-audio').addEventListener('click', saveAndClose);

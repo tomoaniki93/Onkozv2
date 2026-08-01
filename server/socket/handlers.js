@@ -164,6 +164,24 @@ function setupSocketHandlers(io) {
       leaveVoice(socket, channelId, `voice:${channelId}`, io);
     });
 
+    // ── Déplacer un membre vers un autre salon vocal (mod/admin) ──────────────
+    socket.on('voice:move', ({ targetUserId, toChannelId }) => {
+      if (!['admin', 'moderator'].includes(role)) return;   // garde de rôle serveur
+      if (targetUserId == null || toChannelId == null) return;
+
+      const targetSocketId = onlineUsers.get(targetUserId);
+      if (!targetSocketId) return;
+      const targetSocket = io.sockets.sockets.get(targetSocketId);
+      if (!targetSocket) return;
+
+      // La cible doit être en vocal, et pas déjà dans le salon de destination
+      if (targetSocket._voiceChannelId == null) return;
+      if (String(targetSocket._voiceChannelId) === String(toChannelId)) return;
+
+      // Le client cible refait lui-même le handshake mediasoup (leave + join)
+      targetSocket.emit('voice:forceMove', { toChannelId, by: username });
+    });
+
     // ── SALON ÉPHÉMÈRE ────────────────────────────────────────────────────────
 
     socket.on('ephemeral:create', async ({ voiceName, withText }) => {

@@ -260,7 +260,7 @@ const Chat = (() => {
         // Essayer quand même le serveur pour récupérer le vrai titre
         try {
           const res = await fetch(`/api/preview?url=${encodeURIComponent(url)}`, {
-            headers: { 'Authorization': `Bearer ${Auth.getToken()}` },
+            headers: { 'Authorization': `Bearer ${API.getToken()}` },
             signal: AbortSignal.timeout(4000),
           });
           if (res.ok && res.status !== 204) {
@@ -286,7 +286,7 @@ const Chat = (() => {
         data = previewCache.get(url);
       } else {
         const res = await fetch(`/api/preview?url=${encodeURIComponent(url)}`, {
-          headers: { 'Authorization': `Bearer ${Auth.getToken()}` },
+          headers: { 'Authorization': `Bearer ${API.getToken()}` },
           signal: AbortSignal.timeout(8000),
         });
         if (!res.ok || res.status === 204) return;
@@ -540,7 +540,7 @@ const Chat = (() => {
 
       const res  = await fetch('/api/upload', {
         method:  'POST',
-        headers: { 'Authorization': `Bearer ${Auth.getToken()}` },
+        headers: { 'Authorization': `Bearer ${API.getToken()}` },
         body:    formData,
       });
 
@@ -708,7 +708,7 @@ const Chat = (() => {
   async function loadPinned(channelId) {
     try {
       const msgs = await fetch(`/api/channels/${channelId}/pinned`, {
-        headers: { 'Authorization': `Bearer ${Auth.getToken()}` },
+        headers: { 'Authorization': `Bearer ${API.getToken()}` },
       }).then(r => r.json());
       pinnedMessages = Array.isArray(msgs) ? msgs : [];
     } catch { pinnedMessages = []; }

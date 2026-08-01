@@ -53,6 +53,12 @@ const App = (() => {
       AudioSettings.showToast(`🖥️ ${username} partage son écran`);
     });
     socket.on('voice:peers',       peers => Voice.onExistingPeers(peers));
+    socket.on('voice:forceMove', ({ toChannelId, by }) => {
+      const ch = findChannelById(toChannelId);
+      if (!ch) return;
+      AudioSettings.showToast?.(`↔️ Déplacé vers ${ch.name} par ${by}`);
+      selectChannel(ch);   // réutilise tout le flux join existant (leave auto)
+    });
     socket.on('kicked', () => { alert('Vous avez été expulsé.'); API.clearToken(); location.reload(); });
 
     // Présence texte et vocal
@@ -387,6 +393,27 @@ const App = (() => {
     return null;
   }
 
+  function findChannelById(chId) {
+    for (const cat of cats) {
+      const c = cat.channels.find(x => String(x.id) === String(chId));
+      if (c) return c;
+    }
+    return uncategorized.find(x => String(x.id) === String(chId)) || null;
+  }
+
+  /** Tous les salons vocaux (permanents), pour le menu « Déplacer vers ». */
+  function getVoiceChannels() {
+    const out = [];
+    for (const cat of cats) cat.channels.forEach(c => { if (c.type !== 'text') out.push(c); });
+    uncategorized.forEach(c => { if (c.type !== 'text') out.push(c); });
+    return out;
+  }
+
+  /** Émet l'ordre de déplacement (appelé depuis le menu modération de ui.js). */
+  function moveMember(targetUserId, toChannelId) {
+    socket.emit('voice:move', { targetUserId, toChannelId });
+  }
+
   // ── Panneau vocal sidebar (style Discord) ────────────────────────────────
   function showVoiceBar(channelName) {
     const panel = document.getElementById('voice-panel');
@@ -692,7 +719,8 @@ const App = (() => {
     document.getElementById('members-sidebar')?.classList.remove('open');
   }
 
-  return { launch, kickUser, changeRole, showUnreadBadge, bindEvents, openSidebar, closeSidebar, toggleMobileMembers };
+  return { launch, kickUser, changeRole, showUnreadBadge, bindEvents, openSidebar, closeSidebar, toggleMobileMembers,
+           findChannelById, getVoiceChannels, moveMember };
 })();
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────

@@ -279,6 +279,18 @@ const UI = (() => {
       items.push({ icon: '⏳', label: 'Compte temporaire', action: () => AudioSettings.showToast("ℹ️ Ce compte doit d'abord définir un mot de passe"), danger: false });
     }
 
+    // Déplacer vers un salon vocal (mod/admin)
+    if (Auth.isAdmin() || Auth.isMod()) {
+      const vchans = App.getVoiceChannels?.() || [];
+      if (vchans.length) {
+        items.push({ separator: true });
+        items.push({ heading: 'Déplacer vers' });
+        vchans.forEach(ch => {
+          items.push({ icon: '🔊', label: ch.name, action: () => App.moveMember(u.id, ch.id) });
+        });
+      }
+    }
+
     // Séparateur + kick
     items.push({ separator: true });
     items.push({ icon: '👢', label: 'Expulser (Kick)', danger: true, action: () => App.kickUser(u.id) });
@@ -288,6 +300,13 @@ const UI = (() => {
         const sep = document.createElement('div');
         sep.className = 'border-t border-onkoz-border my-1';
         menu.appendChild(sep);
+        return;
+      }
+      if (item.heading) {
+        const h = document.createElement('p');
+        h.className = 'px-3 py-0.5 text-[0.62rem] uppercase tracking-wider text-onkoz-text-muted';
+        h.textContent = item.heading;
+        menu.appendChild(h);
         return;
       }
       const btn = document.createElement('button');

@@ -5,6 +5,76 @@
    ─────────────────────────────────────────────────────────────────────────── */
 const Profile = (() => {
 
+  // ── Galerie d'avatars prédéfinis ───────────────────────────────────────────
+  //  Chaque entrée : { name, url }. Cliquer une vignette remplit le champ Avatar.
+  //
+  //  • DiceBear : avatars générés, libres de droits, aucune image à héberger.
+  //    Change le `seed=` pour varier le rendu. Styles dispo : adventurer,
+  //    bottts, thumbs, fun-emoji, pixel-art, etc. (https://www.dicebear.com)
+  //
+  //  • Tes propres images (ex. visuels que TU as le droit d'utiliser) : héberge-les
+  //    sur le VPS dans /avatars/ et ajoute-les dans PRESETS_CUSTOM ci-dessous.
+  //    Ne hotlink pas d'artworks sous droits (Blizzard, etc.) : héberge des
+  //    fichiers dont tu as l'autorisation, sinon le rendu casse et c'est risqué.
+  const DB = (style, seed) =>
+    `https://api.dicebear.com/9.x/${style}/svg?seed=${encodeURIComponent(seed)}`;
+
+  const PRESETS_DICEBEAR = [
+    { name: 'Aventurier 1', url: DB('adventurer', 'Aragorn') },
+    { name: 'Aventurier 2', url: DB('adventurer', 'Valeera') },
+    { name: 'Aventurier 3', url: DB('adventurer', 'Thrall') },
+    { name: 'Aventurier 4', url: DB('adventurer', 'Jaina') },
+    { name: 'Robot 1',      url: DB('bottts', 'Mekgineer') },
+    { name: 'Robot 2',      url: DB('bottts', 'Gnomeregan') },
+    { name: 'Pixel 1',      url: DB('pixel-art', 'Ragnaros') },
+    { name: 'Pixel 2',      url: DB('pixel-art', 'Illidan') },
+    { name: 'Emoji 1',      url: DB('fun-emoji', 'Murloc') },
+    { name: 'Emoji 2',      url: DB('fun-emoji', 'Peon') },
+    { name: 'Pouce 1',      url: DB('thumbs', 'Azeroth') },
+    { name: 'Pouce 2',      url: DB('thumbs', 'Kalimdor') },
+  ];
+
+  // Ajoute ici tes propres avatars hébergés sur le VPS, ex :
+  //   { name: 'Guerrier', url: 'https://onkoz.fr/avatars/guerrier.png' },
+  const PRESETS_CUSTOM = [];
+
+  const AVATAR_PRESETS = [...PRESETS_CUSTOM, ...PRESETS_DICEBEAR];
+
+  // ── Galerie de bannières prédéfinies ───────────────────────────────────────
+  //  Dégradés générés en SVG (data-URI) : aucune image à héberger, aucun droit
+  //  en jeu, une URL valide utilisable telle quelle dans banner_url.
+  const GRAD = (c1, c2, c3) => {
+    const stops = c3
+      ? `<stop offset="0" stop-color="${c1}"/><stop offset="0.5" stop-color="${c2}"/><stop offset="1" stop-color="${c3}"/>`
+      : `<stop offset="0" stop-color="${c1}"/><stop offset="1" stop-color="${c2}"/>`;
+    const svg =
+      `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="150">` +
+      `<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">${stops}</linearGradient></defs>` +
+      `<rect width="600" height="150" fill="url(#g)"/></svg>`;
+    return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+  };
+
+  const BANNER_PRESETS = [
+    { name: 'Bleu & Or',   url: GRAD('#1e3a8a', '#f5c542') },
+    { name: 'Rouge & Noir', url: GRAD('#7f1d1d', '#111827') },
+    { name: 'Arcane',      url: GRAD('#4c1d95', '#7c3aed', '#c084fc') },
+    { name: 'Fel',         url: GRAD('#052e16', '#22c55e') },
+    { name: 'Givre',       url: GRAD('#0e7490', '#67e8f9') },
+    { name: 'Braise',      url: GRAD('#7c2d12', '#f97316', '#facc15') },
+    { name: 'Nocturne',    url: GRAD('#0f172a', '#334155') },
+    { name: 'Sang',        url: GRAD('#450a0a', '#dc2626') },
+    { name: 'Émeraude',    url: GRAD('#064e3b', '#10b981') },
+    { name: 'Améthyste',   url: GRAD('#2e1065', '#a78bfa') },
+    { name: 'Crépuscule',  url: GRAD('#1e1b4b', '#be185d', '#f59e0b') },
+    { name: 'Abysse',      url: GRAD('#020617', '#1e40af') },
+  ];
+
+  // Bannières perso hébergées sur le VPS, ex :
+  //   { name: 'Guilde', url: 'https://onkoz.fr/banners/guilde.png' },
+  const BANNER_CUSTOM = [];
+
+  const ALL_BANNERS = [...BANNER_CUSTOM, ...BANNER_PRESETS];
+
   // Cache local des profils { userId: { bio, status, avatar_url, banner_url } }
   const cache = {};
   let socket  = null;
@@ -68,6 +138,8 @@ const Profile = (() => {
             <label class="text-[0.72rem] font-bold uppercase tracking-wider text-onkoz-text-muted">🖼 URL Avatar</label>
             <input id="edit-avatar-url" type="url" placeholder="https://..."
                    class="bg-onkoz-deep border border-onkoz-border rounded-md px-3 py-2 text-sm outline-none focus:border-onkoz-accent transition-colors" />
+            <span class="text-[0.68rem] text-onkoz-text-muted">ou choisis-en un :</span>
+            <div id="avatar-presets" class="grid grid-cols-6 gap-1.5 mt-0.5"></div>
           </div>
 
           <!-- Bannière URL -->
@@ -75,6 +147,8 @@ const Profile = (() => {
             <label class="text-[0.72rem] font-bold uppercase tracking-wider text-onkoz-text-muted">🏙 URL Bannière</label>
             <input id="edit-banner-url" type="url" placeholder="https://..."
                    class="bg-onkoz-deep border border-onkoz-border rounded-md px-3 py-2 text-sm outline-none focus:border-onkoz-accent transition-colors" />
+            <span class="text-[0.68rem] text-onkoz-text-muted">ou choisis-en une :</span>
+            <div id="banner-presets" class="grid grid-cols-4 gap-1.5 mt-0.5"></div>
           </div>
 
         </div>
@@ -152,6 +226,58 @@ const Profile = (() => {
     avatarInput.addEventListener('input', updatePreview);
     bannerInput.addEventListener('input', updatePreview);
     updatePreview();
+
+    // ── Galerie d'avatars prédéfinis ──
+    const presetGrid = document.getElementById('avatar-presets');
+    if (presetGrid) {
+      presetGrid.innerHTML = '';
+      AVATAR_PRESETS.forEach(p => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.title = p.name;
+        btn.className =
+          'aspect-square rounded-md overflow-hidden border-2 border-transparent ' +
+          'hover:border-onkoz-accent focus:border-onkoz-accent transition-colors bg-onkoz-deep';
+        btn.innerHTML =
+          `<img src="${p.url}" alt="${p.name}" loading="lazy" ` +
+          `class="w-full h-full object-cover pointer-events-none" ` +
+          `onerror="this.parentElement.style.display='none'">`;
+        btn.addEventListener('click', () => {
+          avatarInput.value = p.url;
+          updatePreview();
+          // Met en évidence la sélection courante
+          presetGrid.querySelectorAll('button').forEach(b =>
+            b.classList.remove('border-onkoz-accent'));
+          btn.classList.add('border-onkoz-accent');
+        });
+        presetGrid.appendChild(btn);
+      });
+    }
+
+    // ── Galerie de bannières prédéfinies ──
+    const bannerGrid = document.getElementById('banner-presets');
+    if (bannerGrid) {
+      bannerGrid.innerHTML = '';
+      ALL_BANNERS.forEach(b => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.title = b.name;
+        btn.className =
+          'h-8 rounded-md overflow-hidden border-2 border-transparent ' +
+          'hover:border-onkoz-accent focus:border-onkoz-accent transition-colors';
+        btn.style.backgroundImage    = `url("${b.url}")`;
+        btn.style.backgroundSize     = 'cover';
+        btn.style.backgroundPosition = 'center';
+        btn.addEventListener('click', () => {
+          bannerInput.value = b.url;
+          updatePreview();
+          bannerGrid.querySelectorAll('button').forEach(x =>
+            x.classList.remove('border-onkoz-accent'));
+          btn.classList.add('border-onkoz-accent');
+        });
+        bannerGrid.appendChild(btn);
+      });
+    }
 
     document.getElementById('close-profile-panel').addEventListener('click', () => panel.remove());
     document.getElementById('btn-save-profile').addEventListener('click', () => saveProfile(panel));
