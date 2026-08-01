@@ -110,6 +110,9 @@ const App = (() => {
 
     // ── Éphémères ──
     list.appendChild(renderEphemeralHeader());
+
+    // Glisser-déposer pour réorganiser (admin/mod)
+    enableSidebarDnD();
   }
 
   function renderCategorySection(cat, canManage) {
@@ -276,6 +279,113 @@ const App = (() => {
   }
 
   // ── Créer item salon ──────────────────────────────────────────────────────
+  // ── Glisser-déposer de réorganisation ───────────────────────────────────────
+  let dndDragged = null;
+  let dndDidDrag = false;
+
+  function dndContainers() {
+    return [
+      ...document.querySelectorAll('[id^="cat-channels-"]'),
+      document.getElementById('uncategorized-channels'),
+    ].filter(Boolean);
+  }
+
+  function enableSidebarDnD() {
+    if (!(Auth.isAdmin() || Auth.isMod())) return;
+
+    document.querySelectorAll('#channel-list .channel-item[data-id]').forEach(li => {
+      // On n'active le drag que sur les salons rangés (pas les éphémères)
+      if (!li.closest('[id^="cat-channels-"]') && li.parentElement?.id !== 'uncategorized-channels') return;
+      li.draggable = true;
+      li.addEventListener('dragstart', onDndStart);
+      li.addEventListener('dragend',   onDndEnd);
+    });
+
+    dndContainers().forEach(ul => {
+      ul.addEventListener('dragover', onDndOver);
+      ul.addEventListener('drop',     onDndDrop);
+    });
+  }
+
+  function onDndStart(e) {
+    dndDragged = e.currentTarget;
+    dndDidDrag = true;
+    e.dataTransfer.effectAllowed = 'move';
+    setTimeout(() => dndDragged?.classList.add('opacity-40'), 0);
+  }
+
+  function onDndEnd() {
+    dndDragged?.classList.remove('opacity-40');
+    dndDragged = null;
+    // Laisse passer l'éventuel click post-drag avant de réautoriser la sélection
+    setTimeout(() => { dndDidDrag = false; }, 60);
+  }
+
+  function onDndOver(e) {
+    e.preventDefault();
+    if (!dndDragged) return;
+    const ul = e.currentTarget;
+    const after = dndAfterElement(ul, e.clientY);
+    if (after == null) ul.appendChild(dndDragged);
+    else ul.insertBefore(dndDragged, after);
+  }
+
+  function dndAfterElement(container, y) {
+    const els = [...container.querySelectorAll('.channel-item:not(.opacity-40)')];
+    return els.reduce((closest, child) => {
+      const box = child.getBoundingClientRect();
+      const offset = y - box.top - box.height / 2;
+      if (offset < 0 && offset > closest.offset) return { offset, element: child };
+      return closest;
+    }, { offset: -Infinity, element: null }).element;
+  }
+
+  function onDndDrop(e) {
+    e.preventDefault();
+    persistSidebarOrder();
+  }
+
+  function persistSidebarOrder() {
+    const channels = [];
+
+    document.querySelectorAll('[id^="cat-channels-"]').forEach(ul => {
+      const catId = parseInt(ul.id.replace('cat-channels-', ''), 10);
+      [...ul.querySelectorAll('.channel-item[data-id]')].forEach((li, i) => {
+        channels.push({ id: parseInt(li.dataset.id, 10), position: i, category_id: catId });
+      });
+    });
+
+    const uncat = document.getElementById('uncategorized-channels');
+    if (uncat) {
+      [...uncat.querySelectorAll('.channel-item[data-id]')].forEach((li, i) => {
+        channels.push({ id: parseInt(li.dataset.id, 10), position: i, category_id: null });
+      });
+    }
+
+    // Synchroniser l'état local pour que les re-rendus (présence, etc.) restent cohérents
+    applyOrderToState(channels);
+
+    API.reorderLayout({ channels }).catch(() => {
+      AudioSettings.showToast?.('❌ Réorganisation non enregistrée');
+    });
+  }
+
+  function applyOrderToState(channels) {
+    const all  = [...cats.flatMap(c => c.channels), ...uncategorized];
+    const byId = new Map(all.map(ch => [ch.id, ch]));
+    cats.forEach(c => { c.channels = []; });
+    uncategorized = [];
+    channels.forEach(c => {
+      const ch = byId.get(c.id);
+      if (!ch) return;
+      ch.position = c.position;
+      ch.category_id = c.category_id;
+      if (c.category_id == null) { uncategorized.push(ch); return; }
+      const cat = cats.find(x => x.id === c.category_id);
+      (cat ? cat.channels : uncategorized).push(ch);
+    });
+  }
+
   function createChannelItem(ch) {
     const li = document.createElement('li');
     li.id = `ch-item-${ch.id}`;
@@ -313,7 +423,7 @@ const App = (() => {
     presenceEl.className = 'pl-5 flex flex-wrap gap-x-1';
 
     li.append(row, presenceEl);
-    li.addEventListener('click', () => selectChannel(ch));
+    li.addEventListener('click', () => { if (!dndDidDrag) selectChannel(ch); });
     return li;
   }
 

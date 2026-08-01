@@ -70,4 +70,5 @@ Object.assign(API, {
   deleteCategory:   (id)         => API.delete(`/categories/${id}`),
   assignToCategory: (catId, chId) => API.post(`/categories/${catId}/channels/${chId}`),
   createChannelInCategory: (name, type, catId) => API.post('/channels', { name, type, category_id: catId }),
+  reorderLayout:    (payload)    => API.post('/categories/reorder', payload),
 });

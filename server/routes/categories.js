@@ -8,33 +8,51 @@ const router = express.Router();
 // ── Lister toutes les catégories ──────────────────────────────────────────────
 router.get('/', requireAuth, (req, res) => {
   const db = getDb();
-  const cats = db.prepare(`
-    SELECT cat.*, 
-           json_group_array(
-             json_object(
-               'id', c.id, 'name', c.name, 'type', c.type,
-               'position', c.position, 'category_id', c.category_id
-             )
-           ) as channels_json
-    FROM categories cat
-    LEFT JOIN channels c ON c.category_id = cat.id
-    GROUP BY cat.id
-    ORDER BY cat.position, cat.name
-  `).all();
 
-  // Parser le JSON des salons
-  const result = cats.map(cat => ({
-    ...cat,
-    channels: JSON.parse(cat.channels_json).filter(c => c.id !== null),
-  }));
-  result.forEach(r => delete r.channels_json);
+  // On assemble en JS pour garantir l'ordre des salons par `position`
+  // (json_group_array ne respecte pas l'ordre sans ORDER BY, indisponible ici).
+  const categories = db.prepare('SELECT * FROM categories ORDER BY position, name').all();
+  const channels   = db.prepare('SELECT * FROM channels ORDER BY position, name').all();
 
-  // Salons sans catégorie
-  const uncategorized = db.prepare(`
-    SELECT * FROM channels WHERE category_id IS NULL ORDER BY type, position, name
-  `).all();
+  const byCat = new Map(categories.map(c => [c.id, { ...c, channels: [] }]));
+  const uncategorized = [];
+  for (const ch of channels) {
+    if (ch.category_id != null && byCat.has(ch.category_id)) {
+      byCat.get(ch.category_id).channels.push(ch);
+    } else {
+      uncategorized.push(ch);
+    }
+  }
 
-  res.json({ categories: result, uncategorized });
+  res.json({ categories: [...byCat.values()], uncategorized });
+});
+
+// ── Réorganiser salons + catégories (admin/mod) ───────────────────────────────
+//  Body : { channels: [{ id, position, category_id }], categories: [{ id, position }] }
+//  Transaction DML (UPDATE uniquement) — aucun changement de schéma.
+router.post('/reorder', requireAuth, requireRole('moderator'), (req, res) => {
+  const db = getDb();
+  const { channels = [], categories = [] } = req.body || {};
+
+  const updChannel  = db.prepare('UPDATE channels SET position = ?, category_id = ? WHERE id = ?');
+  const updCategory = db.prepare('UPDATE categories SET position = ? WHERE id = ?');
+
+  const apply = db.transaction(() => {
+    channels.forEach((c, i) => {
+      updChannel.run(Number.isInteger(c.position) ? c.position : i, c.category_id ?? null, c.id);
+    });
+    categories.forEach((c, i) => {
+      updCategory.run(Number.isInteger(c.position) ? c.position : i, c.id);
+    });
+  });
+
+  try {
+    apply();
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[reorder]', err.message);
+    res.status(500).json({ error: 'Réorganisation échouée' });
+  }
 });
 
 // ── Créer une catégorie (admin) ───────────────────────────────────────────────
