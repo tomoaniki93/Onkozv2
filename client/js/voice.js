@@ -977,6 +977,16 @@ const Voice = (() => {
     }
   }
 
+  // Construit la pastille d'avatar d'une tuile vocale (image si connue, sinon initiale)
+  function voiceAvatarHtml(username, userId) {
+    const url = (userId != null && window.Profile?.getAvatar) ? Profile.getAvatar(userId) : null;
+    const base = 'user-avatar w-12 h-12 rounded-full flex items-center justify-center text-xl font-bold text-white uppercase overflow-hidden bg-cover bg-center';
+    if (url) {
+      return `<div class="${base}" style="background-image:url('${url}')"></div>`;
+    }
+    return `<div class="${UI.avatarClass(username)} ${base}">${username[0]}</div>`;
+  }
+
   function addPeerToUI(peerId, username, userId) {
     if (userId != null) rememberPeerUser(peerId, userId);
     if (document.getElementById(`vp-${peerId}`)) return;
@@ -985,9 +995,10 @@ const Voice = (() => {
 
     const peer = document.createElement('div');
     peer.id = `vp-${peerId}`;
+    if (userId != null) peer.dataset.userId = userId;
     peer.className = 'voice-peer flex flex-col items-center gap-2 px-4 py-3 bg-onkoz-surface rounded-xl min-w-[80px] transition-all relative cursor-pointer';
     peer.innerHTML = `
-      <div class="${UI.avatarClass(username)} w-12 h-12 rounded-full flex items-center justify-center text-xl font-bold text-white uppercase">${username[0]}</div>
+      ${voiceAvatarHtml(username, userId)}
       <span class="text-[0.8rem] text-onkoz-text-md text-center">${username}</span>`;
     container.appendChild(peer);
 
@@ -1023,8 +1034,8 @@ const Voice = (() => {
       <div class="flex flex-col items-center justify-center flex-1 gap-6">
         <h3 class="text-xl font-semibold text-onkoz-text-md">🎤 ${channelName}</h3>
         <div id="voice-peers-container" class="flex flex-wrap gap-4 justify-center">
-          <div class="voice-peer flex flex-col items-center gap-2 px-4 py-3 bg-onkoz-surface rounded-xl min-w-[80px]" id="vp-self">
-            <div class="${UI.avatarClass(user.username)} w-12 h-12 rounded-full flex items-center justify-center text-xl font-bold text-white uppercase">${user.username[0]}</div>
+          <div class="voice-peer flex flex-col items-center gap-2 px-4 py-3 bg-onkoz-surface rounded-xl min-w-[80px]" id="vp-self" data-user-id="${user.id}">
+            ${voiceAvatarHtml(user.username, user.id)}
             <span class="text-[0.8rem] text-onkoz-text-md text-center">${user.username} <span class="text-onkoz-text-muted">(moi)</span></span>
           </div>
         </div>

@@ -55,7 +55,7 @@ const Chat = (() => {
     div.className = `group flex gap-3 px-2 py-1 rounded-md hover:bg-onkoz-hover/50 transition-colors relative${msg.pinned ? ' border-l-2 border-onkoz-accent bg-onkoz-accent/5' : ''}`;
     if (msg.pinned) div.dataset.pinned = '1';
 
-    const av = UI.makeAvatar(msg.username);
+    const av = UI.makeAvatar(msg.username, '', msg.user_id, window.Profile?.getAvatar?.(msg.user_id));
 
     const body = document.createElement('div');
     body.className = 'flex-1 min-w-0';
