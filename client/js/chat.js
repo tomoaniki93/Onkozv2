@@ -55,7 +55,7 @@ const Chat = (() => {
     div.className = `group flex gap-3 px-2 py-1 rounded-md hover:bg-onkoz-hover/50 transition-colors relative${msg.pinned ? ' border-l-2 border-onkoz-accent bg-onkoz-accent/5' : ''}`;
     if (msg.pinned) div.dataset.pinned = '1';
 
-    const av = UI.makeAvatar(msg.username, '', msg.user_id, window.Profile?.getAvatar?.(msg.user_id));
+    const av = UI.makeAvatar(msg.username, '', msg.user_id, (typeof Profile !== 'undefined' ? Profile.getAvatar?.(msg.user_id) : null));
 
     const body = document.createElement('div');
     body.className = 'flex-1 min-w-0';
@@ -598,7 +598,7 @@ const Chat = (() => {
     initImageUpload();
     initLightbox();
     initPinnedPanel();
-    window.Whisper?.init(socket);
+    if (typeof Whisper !== 'undefined') Whisper.init(socket);
   }
 
   // ── DM ────────────────────────────────────────────────────────────────────
@@ -641,7 +641,7 @@ const Chat = (() => {
 
   function onDMMessage(msg) {
     // Si une fenêtre de chuchotement gère cet interlocuteur, elle absorbe le message
-    if (window.Whisper?.receive(msg)) return;
+    if (typeof Whisper !== 'undefined' && Whisper.receive(msg)) return;
 
     const me = Auth.getUser();
     const panel = document.getElementById('dm-panel');

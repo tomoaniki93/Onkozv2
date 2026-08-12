@@ -137,7 +137,7 @@ const Voice = (() => {
       startSelfSpeakingDetection(processedStream);
 
       // Si le mode push-to-talk est actif, démarrer micro fermé
-      window.Hotkeys?.applyMode();
+      if (typeof Hotkeys !== 'undefined') Hotkeys.applyMode();
 
       // 7. Transport de réception
       const recvParams = await socketEmit('ms:createTransport', { roomId });
@@ -979,7 +979,7 @@ const Voice = (() => {
 
   // Construit la pastille d'avatar d'une tuile vocale (image si connue, sinon initiale)
   function voiceAvatarHtml(username, userId) {
-    const url = (userId != null && window.Profile?.getAvatar) ? Profile.getAvatar(userId) : null;
+    const url = (userId != null && typeof Profile !== 'undefined' && Profile.getAvatar) ? Profile.getAvatar(userId) : null;
     const base = 'user-avatar w-12 h-12 rounded-full flex items-center justify-center text-xl font-bold text-white uppercase overflow-hidden bg-cover bg-center';
     if (url) {
       return `<div class="${base}" style="background-image:url('${url}')"></div>`;

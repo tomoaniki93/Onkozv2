@@ -820,7 +820,7 @@ const App = (() => {
       if (e.key === 'v' && e.altKey) { e.preventDefault(); Voice.toggleOverlay(); }
     });
 
-    window.Hotkeys?.init();
+    if (typeof Hotkeys !== 'undefined') Hotkeys.init();
   }
 
   // ── Fonctions mobile ──────────────────────────────────────────────────────
