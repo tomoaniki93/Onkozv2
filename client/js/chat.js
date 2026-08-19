@@ -87,11 +87,16 @@ const Chat = (() => {
     // Parser le contenu : texte normal + image inline
     const IMG_RE = /\[image:(\/uploads\/[^\]]+)\]/g;
     const rawContent = msg.content || '';
-    const textPart   = rawContent.replace(IMG_RE, '').trim();
+    const textPart   = rawContent.replace(IMG_RE, '');
     const imgMatches = [...rawContent.matchAll(IMG_RE)];
 
-    if (textPart) {
-      const p = document.createElement('p');
+    if (textPart.trim()) {
+       const p = document.createElement('p');
+
+      // Conserver les retours à la ligne, lignes vides et espaces du texte collé.
+      p.style.whiteSpace = 'pre-wrap';
+      p.style.overflowWrap = 'anywhere';
+  
       // Rendre les URLs cliquables
       p.innerHTML = linkify(textPart);
       content.appendChild(p);
@@ -511,10 +516,10 @@ const Chat = (() => {
   // ── Upload et envoi ────────────────────────────────────────────────────────
   async function sendMessage() {
     const input   = document.getElementById('message-input');
-    const content = input.value.trim();
+    const content = input.value;
 
     // Rien à envoyer
-    if (!content && !pendingImageFile) return;
+    if (!content.trim() && !pendingImageFile) return;
 
     // Si image en attente → uploader d'abord
     if (pendingImageFile) {
@@ -524,6 +529,7 @@ const Chat = (() => {
     }
 
     input.value = '';
+    input.style.height = 'auto';
     resetImagePreview();
   }
 

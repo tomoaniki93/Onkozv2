@@ -357,8 +357,10 @@
             </svg>
             <input id="file-input" type="file" accept="image/jpeg,image/png,image/gif,image/webp" class="hidden" />
           </label>
-          <input id="message-input" type="text" maxlength="2000" placeholder="Message..."
-                 class="flex-1 bg-transparent border-none outline-none text-onkoz-text placeholder:text-onkoz-text-muted text-sm" />
+          <textarea id="message-input" maxlength="20000" rows="1" placeholder="Message..."
+                    aria-label="Message"
+                    style="min-height:28px;max-height:180px;resize:none;overflow-y:auto;line-height:1.4;"
+                    class="flex-1 bg-transparent border-none outline-none text-onkoz-text placeholder:text-onkoz-text-muted text-sm"></textarea>
           <button id="send-btn" class="w-8 h-8 flex items-center justify-center bg-onkoz-accent hover:bg-onkoz-accent-dk text-white rounded-full transition-colors text-base shrink-0">↑</button>
         </div>
       </div>

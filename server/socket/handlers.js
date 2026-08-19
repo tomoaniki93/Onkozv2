@@ -3,6 +3,10 @@ const { getDb }             = require('../db/database');
 const { verifySocketToken } = require('../middleware/auth');
 const ms                    = require('../mediasoup/worker');
 
+// La saisie client est limitée à 20 000 caractères. On garde une petite marge
+// pour les marqueurs internes ajoutés aux messages contenant une image.
+const MAX_CHAT_PAYLOAD_LENGTH = 22000;
+
 const ephemeralRooms = new Map();
 const onlineUsers    = new Map();           // userId → socketId
 const voiceMembers   = new Map();           // channelId(str) → Set<{userId,username}>
@@ -56,17 +60,22 @@ function setupSocketHandlers(io) {
     });
 
     socket.on('chat:message', ({ channelId, content }) => {
-      if (!content?.trim() || content.length > 2000) return;
+      if (typeof content !== 'string') return;
+
+      // Normalise seulement les fins de ligne Windows/macOS. On ne trim pas le
+      // message afin de conserver l'indentation et les lignes vides collées.
+      const normalizedContent = content.replace(/\r\n?/g, '\n');
+      if (!normalizedContent.trim() || normalizedContent.length > MAX_CHAT_PAYLOAD_LENGTH) return;
       const channel = db.prepare('SELECT * FROM channels WHERE id = ? AND type = ?').get(channelId, 'text');
       if (!channel) return;
 
       const info = db.prepare('INSERT INTO messages (channel_id, user_id, content) VALUES (?, ?, ?)').run(
-        channelId, userId, content.trim()
+        channelId, userId, normalizedContent
       );
       io.to(`ch:${channelId}`).emit('chat:message', {
         id: info.lastInsertRowid, channel_id: channelId,
         user_id: userId, username, role,
-        content: content.trim(),
+        content: normalizedContent,
         created_at: Math.floor(Date.now() / 1000),
       });
     });

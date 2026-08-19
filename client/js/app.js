@@ -794,8 +794,25 @@ const App = (() => {
     document.getElementById('voice-panel-mute').addEventListener('click',  () => Voice.toggleMute());
     document.getElementById('voice-panel-leave2').addEventListener('click', () => { Voice.leaveRoom(); hideVoiceBar(); });
     document.getElementById('voice-panel-overlay')?.addEventListener('click', () => Voice.toggleOverlay());
+
     document.getElementById('send-btn').addEventListener('click', () => Chat.sendMessage());
-    document.getElementById('message-input').addEventListener('keydown', e => { if (e.key === 'Enter') Chat.sendMessage(); });
+    const messageInput = document.getElementById('message-input');
+
+    // Entrée = envoyer, Shift+Entrée = nouvelle ligne.
+    // isComposing évite d'envoyer au milieu d'une composition IME.
+    messageInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+        e.preventDefault();
+        Chat.sendMessage();
+      }
+    });
+
+    // Le textarea grandit avec le contenu jusqu'à 180 px, puis devient scrollable.
+    messageInput.addEventListener('input', () => {
+      messageInput.style.height = 'auto';
+      messageInput.style.height = `${Math.min(messageInput.scrollHeight, 180)}px`;
+    });
+
     document.getElementById('dm-send-btn').addEventListener('click', () => Chat.sendDM());
     document.getElementById('dm-input').addEventListener('keydown', e => { if (e.key === 'Enter') Chat.sendDM(); });
     document.getElementById('close-dm').addEventListener('click', () => Chat.closeDM());
