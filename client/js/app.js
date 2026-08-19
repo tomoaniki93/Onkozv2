@@ -108,8 +108,11 @@ const App = (() => {
       list.appendChild(renderUncategorizedSection(canManage));
     }
 
-    // ── Éphémères ──
-    list.appendChild(renderEphemeralHeader());
+    // ── Bug Tracker ──
+    // Remplace la section Éphémères désactivée dans l'interface.
+    if (typeof BugTracker !== 'undefined') {
+      list.appendChild(BugTracker.createSidebarSection());
+    }
 
     // Glisser-déposer pour réorganiser (admin/mod)
     enableSidebarDnD();

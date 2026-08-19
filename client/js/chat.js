@@ -46,6 +46,15 @@ const Chat = (() => {
     loadPinned(channelId);
   }
 
+  // Quitte proprement le salon texte courant lorsqu'un module natif (Bug Tracker,
+  // plus tard Long Reports, etc.) prend la zone centrale. Sans ça, un nouveau
+  // message reçu pourrait être ajouté par-dessus l'écran du module.
+  function leaveTextChannelView() {
+    if (currentTextChannel && socket) socket.emit('chat:leave', currentTextChannel);
+    currentTextChannel = null;
+    closePinnedPanel();
+  }
+
   function appendMessage(msg, area, scroll = true) {
     const isMod = Auth.isMod() || Auth.isAdmin();
     const me    = Auth.getUser();
@@ -876,5 +885,5 @@ const Chat = (() => {
     showToast('📌 Message désépinglé');
   }
 
-  return { init, joinTextChannel, onMessage, onDeleted, onReactionUpdate, sendMessage, openDM, onDMMessage, sendDM, closeDM, setupEphemeralText, onPinned, onUnpinned };
+  return { init, joinTextChannel, leaveTextChannelView, onMessage, onDeleted, onReactionUpdate, sendMessage, openDM, onDMMessage, sendDM, closeDM, setupEphemeralText, onPinned, onUnpinned };
 })();

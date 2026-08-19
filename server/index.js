@@ -17,6 +17,7 @@ const userRoutes      = require('./routes/users');
 const categoryRoutes  = require('./routes/categories');
 const uploadRoutes    = require('./routes/upload');
 const previewRoutes   = require('./routes/preview');
+const bugRoutes       = require('./routes/bugs');
 
 const PORT = process.env.PORT || 3000;
 
@@ -32,7 +33,9 @@ const io     = new Server(server, {
 
 // ── Middlewares ───────────────────────────────────────────────────────────────
 app.use(cors());
-app.use(express.json());
+// Les diagnostics du Bug Tracker peuvent être nettement plus gros qu'un message.
+// 2 Mo reste volontairement borné ; les futurs Long Reports seront stockés à part.
+app.use(express.json({ limit: '2mb' }));
 
 // ── Content-Security-Policy ───────────────────────────────────────────────────
 // Démarrée en Report-Only : les violations sont signalées dans la console du
@@ -79,6 +82,7 @@ app.use('/api/users',      userRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/upload',     uploadRoutes);
 app.use('/api/preview',   previewRoutes);
+app.use('/api/bugs',      bugRoutes);
 
 // Health check
 app.get('/api/health', (_, res) => res.json({ status: 'ok', ts: Date.now() }));

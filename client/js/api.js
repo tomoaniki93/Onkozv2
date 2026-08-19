@@ -71,4 +71,15 @@ Object.assign(API, {
   assignToCategory: (catId, chId) => API.post(`/categories/${catId}/channels/${chId}`),
   createChannelInCategory: (name, type, catId) => API.post('/channels', { name, type, category_id: catId }),
   reorderLayout:    (payload)    => API.post('/categories/reorder', payload),
+
+  // ── Bug Tracker ──────────────────────────────────────────────────────────
+  getBugMeta:       ()              => API.get('/bugs/meta'),
+  getBugSidebar:    (project)       => API.get(`/bugs/sidebar?project=${encodeURIComponent(project)}`),
+  getBugs:          (query = '')    => API.get(`/bugs${query ? `?${query}` : ''}`),
+  getBug:           (id)            => API.get(`/bugs/${id}`),
+  createBug:        (data)          => API.post('/bugs', data),
+  commentBug:       (id, content)   => API.post(`/bugs/${id}/comments`, { content }),
+  voteBug:          (id)            => API.post(`/bugs/${id}/vote`, {}),
+  updateBug:        (id, patch)     => API.patch(`/bugs/${id}`, patch),
+  deleteBug:        (id)            => API.delete(`/bugs/${id}`),
 });

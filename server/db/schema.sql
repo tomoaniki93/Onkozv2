@@ -72,6 +72,50 @@ CREATE TABLE IF NOT EXISTS reactions (
   UNIQUE(message_id, user_id, emoji)
 );
 
+-- Bug Tracker natif ONKOZ
+CREATE TABLE IF NOT EXISTS bug_reports (
+  id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+  project               TEXT NOT NULL DEFAULT 'TomoMod',
+  title                 TEXT NOT NULL,
+  description           TEXT NOT NULL,
+  reproduction_steps    TEXT DEFAULT NULL,
+  logs                  TEXT DEFAULT NULL,
+  severity              TEXT NOT NULL DEFAULT 'Medium'
+                        CHECK(severity IN ('Critical','High','Medium','Low')),
+  status                TEXT NOT NULL DEFAULT 'Open'
+                        CHECK(status IN ('Open','Confirmed','InProgress','NeedsInfo','Resolved','Closed','Duplicate','Rejected')),
+  category              TEXT DEFAULT NULL,
+  wow_version           TEXT DEFAULT NULL,
+  addon_version         TEXT DEFAULT NULL,
+  resolved_version      TEXT DEFAULT NULL,
+  reporter_user_id      INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  reporter_name         TEXT NOT NULL,
+  reporter_is_temporary INTEGER NOT NULL DEFAULT 0,
+  assignee_user_id      INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  screenshot_url        TEXT DEFAULT NULL,
+  pinned                INTEGER NOT NULL DEFAULT 0,
+  created_at            INTEGER NOT NULL DEFAULT (unixepoch()),
+  updated_at            INTEGER NOT NULL DEFAULT (unixepoch())
+);
+
+CREATE TABLE IF NOT EXISTS bug_comments (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  bug_id         INTEGER NOT NULL REFERENCES bug_reports(id) ON DELETE CASCADE,
+  author_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  author_name    TEXT NOT NULL,
+  author_role    TEXT NOT NULL DEFAULT 'user',
+  content        TEXT NOT NULL,
+  created_at     INTEGER NOT NULL DEFAULT (unixepoch())
+);
+
+CREATE TABLE IF NOT EXISTS bug_votes (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  bug_id     INTEGER NOT NULL REFERENCES bug_reports(id) ON DELETE CASCADE,
+  user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  UNIQUE(bug_id, user_id)
+);
+
 -- Index
 CREATE INDEX IF NOT EXISTS idx_reactions_message ON reactions(message_id);
 
@@ -80,3 +124,7 @@ CREATE INDEX IF NOT EXISTS idx_messages_channel ON messages(channel_id, created_
 CREATE INDEX IF NOT EXISTS idx_dm_users ON direct_messages(from_id, to_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_dm_unread ON direct_messages(to_id, read);
 CREATE INDEX IF NOT EXISTS idx_channels_category ON channels(category_id, position);
+CREATE INDEX IF NOT EXISTS idx_bug_reports_project_status ON bug_reports(project, status, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_bug_reports_category ON bug_reports(project, category);
+CREATE INDEX IF NOT EXISTS idx_bug_comments_bug ON bug_comments(bug_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_bug_votes_bug ON bug_votes(bug_id);
