@@ -403,6 +403,7 @@ const BugTracker = (() => {
     const area = areaLoading('Chargement du bug...');
     try {
       const bug = await API.getBug(id);
+      const canModerate = Auth.isAdmin() || Auth.isMod();
       currentProject = bug.project;
       setHeader('🐞', `#${String(bug.id).padStart(4, '0')} · ${bug.title}`, bug.project);
       area.innerHTML = '';
