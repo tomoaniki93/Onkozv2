@@ -82,4 +82,5 @@ Object.assign(API, {
   voteBug:          (id)            => API.post(`/bugs/${id}/vote`, {}),
   updateBug:        (id, patch)     => API.patch(`/bugs/${id}`, patch),
   deleteBug:        (id)            => API.delete(`/bugs/${id}`),
+  deleteBugComment: (bugId, commentId) => API.delete(`/bugs/${bugId}/comments/${commentId}`),
 });

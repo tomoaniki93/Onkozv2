@@ -118,12 +118,16 @@ const BugTracker = (() => {
     return area;
   }
 
-  function makeStat(label, value, accent = '') {
-    const el = document.createElement('div');
-    el.className = 'bg-onkoz-surface border border-onkoz-border rounded-xl px-4 py-3 min-w-0';
+  function makeStat(label, value, accent = '', onClick = null, active = false) {
+    const el = document.createElement(onClick ? 'button' : 'div');
+    if (onClick) el.type = 'button';
+    el.className = `bg-onkoz-surface border rounded-xl px-4 py-3 min-w-0 text-left transition-colors ${
+      active ? 'border-onkoz-accent ring-1 ring-onkoz-accent/30' : 'border-onkoz-border'
+    } ${onClick ? 'cursor-pointer hover:bg-onkoz-hover hover:border-onkoz-border-h' : ''}`;
     if (accent) el.style.borderLeft = `3px solid ${accent}`;
     el.innerHTML = `<div class="text-[0.68rem] uppercase tracking-wider text-onkoz-text-muted font-bold">${esc(label)}</div>
       <div class="font-title font-bold text-xl mt-1" style="color:${accent || '#EBE9F5'}">${Number(value || 0)}</div>`;
+    if (onClick) el.addEventListener('click', onClick);
     return el;
   }
 
@@ -168,13 +172,21 @@ const BugTracker = (() => {
 
       const stats = document.createElement('div');
       stats.className = 'grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-2.5 mb-4';
+      const setStatusFilter = (status) => {
+        listState.status = status;
+        renderList();
+      };
       stats.append(
-        makeStat('Total', data.stats.total, '#9B7FE8'),
-        makeStat('Ouverts', data.stats.open, '#6ECFFF'),
-        makeStat('En cours', data.stats.in_progress, '#FFD93D'),
-        makeStat('Résolus', data.stats.resolved, '#4FD17A'),
-        makeStat('Fermés', data.stats.closed, '#5A5474'),
-        makeStat('Critiques actifs', data.stats.critical_active, '#FF5252'),
+        makeStat('Total', data.stats.total, '#9B7FE8', () => setStatusFilter('all'), listState.status === 'all'),
+        makeStat('Ouverts', data.stats.open, '#6ECFFF', () => setStatusFilter('Open'), listState.status === 'Open'),
+        makeStat('En cours', data.stats.in_progress, '#FFD93D', () => setStatusFilter('InProgress'), listState.status === 'InProgress'),
+        makeStat('Résolus', data.stats.resolved, '#4FD17A', () => setStatusFilter('Resolved'), listState.status === 'Resolved'),
+        makeStat('Fermés', data.stats.closed, '#5A5474', () => setStatusFilter('Closed'), listState.status === 'Closed'),
+        makeStat('Critiques actifs', data.stats.critical_active, '#FF5252', () => {
+          listState.status = 'active';
+          listState.severity = 'Critical';
+          renderList();
+        }, listState.status === 'active' && listState.severity === 'Critical'),
       );
 
       const filters = document.createElement('div');
@@ -457,8 +469,33 @@ const BugTracker = (() => {
         const el = document.createElement('div');
         const staff = c.author_role === 'admin' || c.author_role === 'moderator';
         el.className = `rounded-lg border p-3 ${staff ? 'border-onkoz-accent/30 bg-onkoz-accent/5' : 'border-onkoz-border bg-onkoz-elevated'}`;
-        el.innerHTML = `<div class="flex items-center gap-2 mb-1"><strong class="text-sm ${staff ? 'text-onkoz-accent-lt' : 'text-onkoz-text'}">${esc(c.author_name)}</strong>${staff ? '<span class="text-[0.62rem] px-1.5 py-px rounded bg-onkoz-accent/15 text-onkoz-accent-lt font-bold">DEV</span>' : ''}<span class="text-[0.68rem] text-onkoz-text-muted ml-auto">${formatDate(c.created_at)}</span></div>`;
-        el.appendChild(preText(c.content));
+        
+        const commentHead = document.createElement('div');
+        commentHead.className = 'flex items-center gap-2 mb-1';
+        commentHead.innerHTML = `<strong class="text-sm ${staff ? 'text-onkoz-accent-lt' : 'text-onkoz-text'}">${esc(c.author_name)}</strong>${staff ? '<span class="text-[0.62rem] px-1.5 py-px rounded bg-onkoz-accent/15 text-onkoz-accent-lt font-bold">DEV</span>' : ''}<span class="text-[0.68rem] text-onkoz-text-muted ml-auto">${formatDate(c.created_at)}</span>`;
+        
+        if (canModerate) {
+          const removeComment = document.createElement('button');
+          removeComment.type = 'button';
+          removeComment.className = 'ml-1 px-1.5 py-0.5 rounded text-[0.68rem] text-onkoz-danger hover:bg-onkoz-danger/10';
+          removeComment.title = 'Supprimer ce commentaire';
+          removeComment.textContent = '🗑';
+          removeComment.addEventListener('click', async () => {
+            if (!confirm(`Supprimer définitivement le commentaire de ${c.author_name} ?`)) return;
+            removeComment.disabled = true;
+            try {
+              await API.deleteBugComment(bug.id, c.id);
+              toast('🗑 Commentaire supprimé');
+              await renderBug(bug.id);
+            } catch (err) {
+              toast(`❌ ${err.message}`);
+              removeComment.disabled = false;
+            }
+          });
+          commentHead.appendChild(removeComment);
+        }
+
+        el.append(commentHead, preText(c.content));
         commentsWrap.appendChild(el);
       });
 
@@ -521,7 +558,34 @@ const BugTracker = (() => {
       } catch (err) { toast(`❌ ${err.message}`); }
       finally { save.disabled = false; }
     });
-    box.append(field('Statut', status), field('Sévérité', severity), field('Version corrigée', resolved), pinned, save);
+
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'w-full px-3 py-2 rounded-lg border border-onkoz-danger/40 text-onkoz-danger hover:bg-onkoz-danger/10 text-sm font-semibold transition-colors';
+    remove.textContent = '🗑 Supprimer ce bug';
+    remove.addEventListener('click', async () => {
+      const bugLabel = `#${String(bug.id).padStart(4, '0')} · ${bug.title}`;
+      if (!confirm(`Supprimer définitivement ${bugLabel} ?\n\nLes commentaires et les votes associés seront également supprimés. Cette action est irréversible.`)) return;
+      remove.disabled = true;
+      remove.textContent = 'Suppression...';
+      try {
+        await API.deleteBug(bug.id);
+        toast(`🗑 Bug #${String(bug.id).padStart(4, '0')} supprimé`);
+        currentBugId = null;
+        await refreshSidebarBadge();
+        await renderList();
+      } catch (err) {
+        toast(`❌ ${err.message}`);
+        remove.disabled = false;
+        remove.textContent = '🗑 Supprimer ce bug';
+      }
+    });
+
+    const dangerZone = document.createElement('div');
+    dangerZone.className = 'pt-3 mt-1 border-t border-onkoz-danger/20';
+    dangerZone.appendChild(remove);
+
+    box.append(field('Statut', status), field('Sévérité', severity), field('Version corrigée', resolved), pinned, save, dangerZone);
     return panel('Administration', box);
   }
 

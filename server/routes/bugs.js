@@ -317,6 +317,20 @@ router.patch('/:id(\\d+)', requireRole('moderator'), (req, res) => {
   res.json(getBugOr404(db, bug.id, res));
 });
 
+// Modérateur/Admin : supprimer un commentaire du Bug Tracker.
+router.delete('/:id(\\d+)/comments/:commentId(\\d+)', requireRole('moderator'), (req, res) => {
+  const db = getDb();
+  const bug = getBugOr404(db, Number(req.params.id), res);
+  if (!bug) return;
+
+  const result = db.prepare('DELETE FROM bug_comments WHERE id = ? AND bug_id = ?')
+    .run(Number(req.params.commentId), bug.id);
+  if (!result.changes) return res.status(404).json({ error: 'Commentaire introuvable' });
+
+  db.prepare('UPDATE bug_reports SET updated_at = unixepoch() WHERE id = ?').run(bug.id);
+  res.json({ ok: true });
+});
+
 router.delete('/:id(\\d+)', requireRole('moderator'), (req, res) => {
   const db = getDb();
   const result = db.prepare('DELETE FROM bug_reports WHERE id = ?').run(Number(req.params.id));
