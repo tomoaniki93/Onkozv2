@@ -120,7 +120,9 @@ const Hotkeys = (() => {
   //  ACTIONS MICRO
   // ═══════════════════════════════════════════════════════════════════════════
   function inVoice() {
-    return !!(window.Voice && Voice.getCurrentRoomId && Voice.getCurrentRoomId());
+    // « const Voice » (voice.js) n'est pas une propriété de window : window.Voice
+    // valait toujours undefined, et push-to-talk / couper le micro ne réagissaient jamais.
+    return !!(typeof Voice !== 'undefined' && Voice.getCurrentRoomId && Voice.getCurrentRoomId());
   }
 
   function toggleMute() {

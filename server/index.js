@@ -18,6 +18,7 @@ const categoryRoutes  = require('./routes/categories');
 const uploadRoutes    = require('./routes/upload');
 const previewRoutes   = require('./routes/preview');
 const bugRoutes       = require('./routes/bugs');
+const zeroGravityRoutes = require('./routes/zerogravity');
 
 const PORT = process.env.PORT || 3000;
 
@@ -57,11 +58,20 @@ const CSP_POLICY = [
   "form-action 'self'",
   "frame-ancestors 'none'",
 ].join('; ');
+// Jeux intégrés (/jeux/...) : pages autonomes affichées dans une iframe de la
+// zone centrale (scripts inline, Babylon.js via jsdelivr, Google Fonts).
+// Politique dédiée et APPLIQUÉE : frame-ancestors 'self' n'autorise l'affichage
+// que dans ONKOZ, et prime sur le « X-Frame-Options DENY » ajouté par nginx.
+const GAME_CSP = "frame-ancestors 'self'; object-src 'none'; base-uri 'self'";
 app.use((req, res, next) => {
-  res.setHeader(
-    CSP_REPORT_ONLY ? 'Content-Security-Policy-Report-Only' : 'Content-Security-Policy',
-    CSP_POLICY
-  );
+  if (req.path.startsWith('/jeux/')) {
+    res.setHeader('Content-Security-Policy', GAME_CSP);
+  } else {
+    res.setHeader(
+      CSP_REPORT_ONLY ? 'Content-Security-Policy-Report-Only' : 'Content-Security-Policy',
+      CSP_POLICY
+    );
+  }
   next();
 });
 
@@ -83,6 +93,9 @@ app.use('/api/categories', categoryRoutes);
 app.use('/api/upload',     uploadRoutes);
 app.use('/api/preview',   previewRoutes);
 app.use('/api/bugs',      bugRoutes);
+
+// Jeu Zero-Gravity : pages (jeux/zero-gravity/) + classement (api/classement, api/essai, api/resultat)
+app.use('/jeux/zero-gravity', zeroGravityRoutes);
 
 // Health check
 app.get('/api/health', (_, res) => res.json({ status: 'ok', ts: Date.now() }));

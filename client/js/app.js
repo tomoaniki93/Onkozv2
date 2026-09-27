@@ -114,6 +114,12 @@ const App = (() => {
       list.appendChild(BugTracker.createSidebarSection());
     }
 
+    // ── Jeux ──
+    // Sous le Bug Tracker : Zero-Gravity, affiché dans la zone centrale.
+    if (typeof ZeroGravity !== 'undefined') {
+      list.appendChild(ZeroGravity.createSidebarSection());
+    }
+
     // Glisser-déposer pour réorganiser (admin/mod)
     enableSidebarDnD();
   }
