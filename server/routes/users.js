@@ -26,10 +26,17 @@ router.patch('/me/profile', requireAuth, (req, res) => {
   const uid = req.user.id;
   let { bio, status, avatar_url, banner_url } = req.body;
 
-  if (bio    !== undefined && bio    !== null && bio.length    > 200) return res.status(400).json({ error: 'Bio max 200 caractères' });
-  if (status !== undefined && status !== null && status.length >  50) return res.status(400).json({ error: 'Statut max 50 caractères' });
+  if (bio    != null && (typeof bio    !== 'string' || bio.length    > 200)) return res.status(400).json({ error: 'Bio max 200 caractères' });
+  if (status != null && (typeof status !== 'string' || status.length >  50)) return res.status(400).json({ error: 'Statut max 50 caractères' });
 
-  const isValidUrl = u => { if (typeof u !== 'string') return false; if (u.startsWith('/')) return true; try { new URL(u); return true; } catch { return false; } };
+  // Chemin local, http(s) ou data-URI image — jamais de guillemets, chevrons,
+  // espaces ni antislash (même règle que profile:update dans handlers.js).
+  const isValidUrl = u => {
+    if (typeof u !== 'string' || u.length === 0 || u.length > 500000) return false;
+    if (/["<>\\\s]/.test(u)) return false;
+    if (u.startsWith('/')) return !u.startsWith('//');
+    return /^https?:\/\//i.test(u) || /^data:image\/(png|jpeg|gif|webp|svg\+xml)[;,]/i.test(u);
+  };
   if (avatar_url && !isValidUrl(avatar_url)) return res.status(400).json({ error: 'URL avatar invalide' });
   if (banner_url && !isValidUrl(banner_url)) return res.status(400).json({ error: 'URL bannière invalide' });
 

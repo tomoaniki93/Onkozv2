@@ -204,7 +204,7 @@ const Chat = (() => {
       btn.className = `inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-sm transition-colors ${
         iReacted ? 'bg-onkoz-accent/20 border-onkoz-accent text-onkoz-accent-lt' : 'bg-onkoz-hover border-onkoz-border text-onkoz-text hover:border-onkoz-accent'
       }`;
-      btn.innerHTML = `<span>${emoji}</span><span class="text-[0.72rem] font-bold">${count}</span>`;
+      btn.innerHTML = `<span>${UI.escapeHtml(emoji)}</span><span class="text-[0.72rem] font-bold">${Number(count) || 0}</span>`;
       btn.title = users.map(u => u.username).join(', ');
       btn.addEventListener('click', () => {
         socket.emit('reaction:toggle', { messageId: msgId, emoji, channelId: currentTextChannel });
@@ -340,7 +340,7 @@ const Chat = (() => {
       const thumb = document.createElement('div');
       thumb.className = 'relative';
       thumb.innerHTML = `
-        <img src="${data.image}" alt="" class="w-full object-cover" style="height:160px"
+        <img src="${UI.escapeHtml(data.image)}" alt="" class="w-full object-cover" style="height:160px"
              onerror="this.parentElement.style.display='none'" />
         <div class="absolute inset-0 flex items-center justify-center bg-black/40 hover:bg-black/30 transition-colors">
           <div class="w-10 h-10 bg-red-600 rounded-full flex items-center justify-center shadow-lg">
@@ -711,7 +711,7 @@ const Chat = (() => {
         area.appendChild(chat);
       }
       const msg = document.createElement('div');
-      msg.innerHTML = `<span class="msg-author font-bold text-sm ${role}">${username}</span> <span class="text-sm text-onkoz-text">${content}</span>`;
+      msg.innerHTML = `<span class="msg-author font-bold text-sm ${UI.escapeHtml(role)}">${UI.escapeHtml(username)}</span> <span class="text-sm text-onkoz-text">${UI.escapeHtml(content)}</span>`;
       chat.appendChild(msg);
       chat.scrollTop = chat.scrollHeight;
     });

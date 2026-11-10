@@ -502,12 +502,13 @@ const Profile = (() => {
     popup.style.top  = `${Math.max(8, top)}px`;
     popup.style.left = `${Math.max(8, left)}px`;
 
+    // Les URL viennent d'autres utilisateurs → échappées avant injection en HTML
     const bannerStyle = profile.banner_url
-      ? `background-image:url('${profile.banner_url}');background-size:cover;background-position:center`
+      ? `background-image:url('${UI.escapeHtml(String(profile.banner_url).replace(/'/g, '%27'))}');background-size:cover;background-position:center`
       : 'background:linear-gradient(135deg,#5865f2 0%,#3b1f6b 100%)';
 
     const avatarHtml = profile.avatar_url
-      ? `<img src="${profile.avatar_url}" class="w-16 h-16 rounded-full object-cover border-4 border-onkoz-surface" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" /><div style="display:none" class="${UI.avatarClass(username)} w-16 h-16 rounded-full border-4 border-onkoz-surface flex items-center justify-center text-2xl font-bold text-white uppercase">${username[0]}</div>`
+      ? `<img src="${UI.escapeHtml(profile.avatar_url)}" class="w-16 h-16 rounded-full object-cover border-4 border-onkoz-surface" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" /><div style="display:none" class="${UI.avatarClass(username)} w-16 h-16 rounded-full border-4 border-onkoz-surface flex items-center justify-center text-2xl font-bold text-white uppercase">${username[0]}</div>`
       : `<div class="${UI.avatarClass(username)} w-16 h-16 rounded-full border-4 border-onkoz-surface flex items-center justify-center text-2xl font-bold text-white uppercase">${username[0]}</div>`;
 
     const roleLabel = { admin: '👑 Admin', moderator: '🛡 Modérateur', user: '👤 Membre', temporary: '⏳ Temporaire' }[profile.role] || '👤 Membre';

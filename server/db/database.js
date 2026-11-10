@@ -42,11 +42,24 @@ function ensureAdmin(db) {
 function cleanOldDMs(db) {
   // Supprimer les comptes éphémères expirés
   const now = Math.floor(Date.now() / 1000);
-  const expiredResult = db.prepare(
-    'DELETE FROM users WHERE is_ephemeral = 1 AND expires_at IS NOT NULL AND expires_at < ?'
-  ).run(now);
-  if (expiredResult.changes > 0)
-    console.log(`[DB] Comptes éphémères expirés supprimés : ${expiredResult.changes}`);
+  // Les messages et DM référencent users(id) sans ON DELETE CASCADE : on les
+  // supprime d'abord (DML uniquement, aucun changement de schéma), sinon le
+  // DELETE échoue sur la clé étrangère. Un échec ne doit jamais arrêter le serveur.
+  try {
+    const expired = "SELECT id FROM users WHERE is_ephemeral = 1 AND expires_at IS NOT NULL AND expires_at < ?";
+    const purge = db.transaction(() => {
+      db.prepare(`DELETE FROM messages WHERE user_id IN (${expired})`).run(now);
+      db.prepare(`DELETE FROM direct_messages WHERE from_id IN (${expired}) OR to_id IN (${expired})`).run(now, now);
+      return db.prepare(
+        'DELETE FROM users WHERE is_ephemeral = 1 AND expires_at IS NOT NULL AND expires_at < ?'
+      ).run(now);
+    });
+    const expiredResult = purge();
+    if (expiredResult.changes > 0)
+      console.log(`[DB] Comptes éphémères expirés supprimés : ${expiredResult.changes}`);
+  } catch (err) {
+    console.error('[DB] Suppression des comptes éphémères expirés impossible :', err.message);
+  }
 
   const cutoff = now - 7 * 24 * 3600;
 

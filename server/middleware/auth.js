@@ -27,23 +27,27 @@ function requireAuth(req, res, next) {
   const token  = header.startsWith('Bearer ') ? header.slice(7) : null;
   if (!token) return res.status(401).json({ error: 'Token manquant' });
 
+  let payload;
   try {
-    req.user = verifyToken(token);
-
-    // Vérifier si le compte éphémère est expiré
-    if (req.user.role === 'temporary') {
-      const { getDb } = require('../db/database');
-      const db = getDb();
-      const u  = db.prepare('SELECT expires_at, is_ephemeral FROM users WHERE id = ?').get(req.user.id);
-      if (u && u.is_ephemeral && u.expires_at && u.expires_at < Math.floor(Date.now() / 1000)) {
-        return res.status(401).json({ error: 'Compte éphémère expiré', expired: true });
-      }
-    }
-
-    next();
+    payload = verifyToken(token);
   } catch {
     return res.status(401).json({ error: 'Token invalide ou expiré' });
   }
+
+  // Le token seul ne suffit pas : le compte doit toujours exister, et le rôle
+  // appliqué est celui de la base (un compte supprimé ou rétrogradé perd ses
+  // droits immédiatement, sans attendre l'expiration du token à 30 jours).
+  const { getDb } = require('../db/database');
+  const u = getDb().prepare(
+    'SELECT id, username, role, is_ephemeral, expires_at FROM users WHERE id = ?'
+  ).get(payload.id);
+  if (!u) return res.status(401).json({ error: 'Compte introuvable' });
+  if (u.is_ephemeral && u.expires_at && u.expires_at < Math.floor(Date.now() / 1000)) {
+    return res.status(401).json({ error: 'Compte éphémère expiré', expired: true });
+  }
+
+  req.user = { ...payload, id: u.id, username: u.username, role: u.role };
+  next();
 }
 
 function requireRole(...roles) {
