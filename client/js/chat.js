@@ -560,8 +560,13 @@ const Chat = (() => {
       });
 
       if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || 'Erreur upload');
+        // La réponse peut venir de nginx (page HTML) et non du serveur ONKOZ :
+        // on ne suppose donc pas que c'est du JSON.
+        let msg = res.status === 413
+          ? 'Image trop lourde (refusée par le serveur)'
+          : `Envoi impossible (erreur ${res.status})`;
+        try { msg = (await res.json()).error || msg; } catch (_) {}
+        throw new Error(msg);
       }
 
       const { url } = await res.json();
