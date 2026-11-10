@@ -255,7 +255,7 @@ const App = (() => {
 
       const row = document.createElement('div');
       row.className = 'flex items-center gap-1.5';
-      row.innerHTML = `<span class="shrink-0 text-sm">✨</span><span class="flex-1 truncate">${eph.voiceName}</span><span class="text-[0.7rem] text-onkoz-text-muted">${eph.memberCount}</span>`;
+      row.innerHTML = `<span class="shrink-0 text-sm">✨</span><span class="flex-1 truncate">${UI.escapeHtml(eph.voiceName)}</span><span class="text-[0.7rem] text-onkoz-text-muted">${Number(eph.memberCount) || 0}</span>`;
 
       // Présence membres
       if (eph.members?.length) {
@@ -473,6 +473,8 @@ const App = (() => {
         row.append(av, name, mic);
         el.appendChild(row);
       });
+      // Les lignes viennent d'être recréées → ré-appliquer les voyants « parle »
+      Voice.refreshSidebarSpeaking?.();
     }
   }
 
@@ -494,9 +496,15 @@ const App = (() => {
       Chat.joinTextChannel(ch.id, ch.name);
     } else {
       document.getElementById('message-input-area').style.display = 'none';
-      socket.emit('voice:join', { channelId: ch.id });
-      Voice.joinRoom(ch.id, 'permanent', `voice:${ch.id}`, ch.name);
-      showVoiceBar(ch.name);
+      if (Voice.getCurrentRoomId() === `voice:${ch.id}`) {
+        // Déjà connecté à ce salon (retour depuis un salon texte) :
+        // on ré-affiche la vue vocale sans quitter/rejoindre.
+        Voice.showRoomView(ch.name);
+      } else {
+        socket.emit('voice:join', { channelId: ch.id });
+        Voice.joinRoom(ch.id, 'permanent', `voice:${ch.id}`, ch.name);
+        showVoiceBar(ch.name);
+      }
     }
     // Fermer le drawer sidebar sur mobile après sélection
     if (window.innerWidth <= 640) closeSidebar();

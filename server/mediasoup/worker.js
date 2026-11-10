@@ -115,7 +115,7 @@ function getRtpCapabilities(roomId) {
 
 // ── Transports WebRTC ─────────────────────────────────────────────────────────
 // Plafonds de bitrate — protègent la bande passante indépendamment du client
-const MAX_INCOMING_BITRATE     = 2_500_000; // ingress max par transport (audio + écran + marge)
+const MAX_INCOMING_BITRATE     = 8_000_000; // ingress max par transport (audio + écran 6 Mbps + marge)
 const INITIAL_OUTGOING_BITRATE = 1_000_000; // estimation de départ → montée en qualité plus rapide
 
 async function createWebRtcTransport(roomId) {

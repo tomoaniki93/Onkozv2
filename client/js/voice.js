@@ -40,6 +40,19 @@ const Voice = (() => {
   let isSharing       = false;
   let screenConsumers = new Map(); // peerId → consumer vidéo
 
+  // Qualité du partage d'écran. Le plafond serveur (MAX_INCOMING_BITRATE dans
+  // worker.js) doit rester au-dessus de SCREEN_MAX_BITRATE.
+  const SCREEN_MAX_BITRATE = 6_000_000; // 6 Mbps (1080p30 net, même en jeu)
+  const SCREEN_START_KBPS  = 3000;      // débit de départ → net dès les premières secondes
+  const SCREEN_MAX_FPS     = 30;
+  const SCREEN_HINT        = 'motion';  // 'motion' = fluidité (jeu) · 'detail' = netteté (texte/bureau)
+
+  // Pairs présents dans le salon vocal (indépendant de l'affichage central)
+  let roomPeers     = new Map(); // peerId → { username, userId }
+  let speakingUsers = new Set(); // userId en train de parler (voyant de la sidebar)
+
+  const esc = s => UI.escapeHtml(s);
+
   // ── Init ────────────────────────────────────────────────────────────────────
   function init(s) {
     socket = s;
@@ -263,6 +276,9 @@ const Voice = (() => {
     screenConsumers.clear();
     peerAudioEls.clear();
     peerUserMap.clear();
+    roomPeers.clear();
+    speakingUsers.forEach(uid => applySidebarSpeaking(uid, false));
+    speakingUsers.clear();
     document.getElementById('peer-vol-pop')?.remove();
 
     // Réinitialiser l'état
@@ -278,7 +294,9 @@ const Voice = (() => {
     document.querySelectorAll('[id^="screen-overlay-"]').forEach(el => el.remove());
     hideLocalPreview();
 
-    // Réinitialiser la zone de contenu
+    // Réinitialiser la zone de contenu — seulement si la vue vocale est affichée
+    // (si un salon texte est ouvert, on ne touche pas à la conversation en cours)
+    if (!document.getElementById('voice-peers-container')) return;
     document.getElementById('content-area').innerHTML = `
       <div class="flex flex-col items-center justify-center flex-1 gap-3 text-onkoz-text-muted">
         <div class="text-6xl">🎤</div>
@@ -447,12 +465,17 @@ const Voice = (() => {
       }
 
       const videoTrack = screenStream.getVideoTracks()[0];
+      try { videoTrack.contentHint = SCREEN_HINT; } catch (_) {}
 
       screenProducer = await sendTransport.produce({
         track: videoTrack,
         appData: { kind: 'video', screenShare: true },
-        encodings: [{ maxBitrate: 1_500_000, scaleResolutionDownBy: 1 }],
-        codecOptions: { videoGoogleStartBitrate: 1000 },
+        encodings: [{
+          maxBitrate: SCREEN_MAX_BITRATE,
+          maxFramerate: SCREEN_MAX_FPS,
+          scaleResolutionDownBy: 1,
+        }],
+        codecOptions: { videoGoogleStartBitrate: SCREEN_START_KBPS },
       });
 
       isSharing = true;
@@ -553,7 +576,7 @@ const Voice = (() => {
 
     const badge = document.createElement('div');
     badge.className = 'flex items-center gap-2 bg-onkoz-surface border border-onkoz-border rounded-full px-4 py-2 text-sm font-semibold text-onkoz-text';
-    badge.innerHTML = `<span class="w-2 h-2 rounded-full bg-onkoz-success animate-pulse shrink-0"></span> <strong>${username}</strong>&nbsp;partage son écran`;
+    badge.innerHTML = `<span class="w-2 h-2 rounded-full bg-onkoz-success animate-pulse shrink-0"></span> <strong>${esc(username)}</strong>&nbsp;partage son écran`;
 
     const video = document.createElement('video');
     video.className = 'rounded-xl border border-onkoz-border shadow-dm object-contain cursor-zoom-in';
@@ -965,7 +988,36 @@ const Voice = (() => {
     setSpeaking(`vp-${peerId}`, false);
   }
 
+  // ── Voyant « parle » dans la sidebar (lignes sous le salon vocal) ──────────
+  // Fonctionne même quand un salon texte est affiché au centre.
+  function applySidebarSpeaking(userId, speaking) {
+    document.querySelectorAll(`.voice-presence-row[data-user-id="${userId}"]`).forEach(row => {
+      const av   = row.querySelector('.vpr-av');
+      const name = row.querySelector('.vpr-name');
+      if (av) {
+        av.classList.toggle('speaking', speaking);
+        av.style.boxShadow = speaking ? '0 0 0 2px #4FD17A' : '';
+      }
+      if (name) name.style.color = speaking ? '#EBE9F5' : '';
+    });
+  }
+
+  function setSidebarSpeaking(elemId, speaking) {
+    const userId = elemId === 'vp-self'
+      ? Auth.getUser()?.id
+      : peerUserMap.get(elemId.slice(3));
+    if (userId == null || speakingUsers.has(userId) === speaking) return;
+    speaking ? speakingUsers.add(userId) : speakingUsers.delete(userId);
+    applySidebarSpeaking(userId, speaking);
+  }
+
+  // Ré-applique les voyants après un re-rendu de la sidebar (voice:members)
+  function refreshSidebarSpeaking() {
+    speakingUsers.forEach(uid => applySidebarSpeaking(uid, true));
+  }
+
   function setSpeaking(elemId, speaking) {
+    setSidebarSpeaking(elemId, speaking);
     const el = document.getElementById(elemId);
     if (!el) return;
     const avatar = el.querySelector('.rounded-full');
@@ -982,13 +1034,31 @@ const Voice = (() => {
     const url = (userId != null && typeof Profile !== 'undefined' && Profile.getAvatar) ? Profile.getAvatar(userId) : null;
     const base = 'user-avatar w-12 h-12 rounded-full flex items-center justify-center text-xl font-bold text-white uppercase overflow-hidden bg-cover bg-center';
     if (url) {
-      return `<div class="${base}" style="background-image:url('${url}')"></div>`;
+      const safeUrl = esc(String(url).replace(/'/g, '%27'));
+      return `<div class="${base}" style="background-image:url('${safeUrl}')"></div>`;
     }
-    return `<div class="${UI.avatarClass(username)} ${base}">${username[0]}</div>`;
+    return `<div class="${UI.avatarClass(username)} ${base}">${esc(username[0])}</div>`;
   }
 
   function addPeerToUI(peerId, username, userId) {
     if (userId != null) rememberPeerUser(peerId, userId);
+
+    // Registre + overlay : tenus à jour même si la vue vocale n'est pas affichée
+    // (salon texte ouvert au centre), pour pouvoir la reconstruire plus tard.
+    const known = roomPeers.get(peerId);
+    username = username || known?.username || 'Utilisateur';
+    userId   = userId ?? known?.userId ?? null;
+    roomPeers.set(peerId, { username, userId });
+    if (!known) {
+      overlayAddMember(peerId, username);
+      window.ElectronAPI?.overlayUpdate({ type: 'add', peerId, username });
+    }
+
+    appendPeerTile(peerId, username, userId);
+  }
+
+  // Crée la tuile centrale d'un pair (sans effet si la vue vocale n'est pas affichée)
+  function appendPeerTile(peerId, username, userId) {
     if (document.getElementById(`vp-${peerId}`)) return;
     const container = document.getElementById('voice-peers-container');
     if (!container) return;
@@ -999,7 +1069,7 @@ const Voice = (() => {
     peer.className = 'voice-peer flex flex-col items-center gap-2 px-4 py-3 bg-onkoz-surface rounded-xl min-w-[80px] transition-all relative cursor-pointer';
     peer.innerHTML = `
       ${voiceAvatarHtml(username, userId)}
-      <span class="text-[0.8rem] text-onkoz-text-md text-center">${username}</span>`;
+      <span class="text-[0.8rem] text-onkoz-text-md text-center">${esc(username)}</span>`;
     container.appendChild(peer);
 
     // Clic sur la tuile → réglage du volume de ce pair
@@ -1007,9 +1077,6 @@ const Voice = (() => {
       e.stopPropagation();
       togglePeerVolumePopover(peerId, username, peer);
     });
-
-    overlayAddMember(peerId, username);
-    window.ElectronAPI?.overlayUpdate({ type: 'add', peerId, username });
   }
 
   function removePeerFromUI(peerId) {
@@ -1021,6 +1088,7 @@ const Voice = (() => {
     consumers.delete(peerId);
     peerAudioEls.delete(peerId);
     peerUserMap.delete(peerId);
+    roomPeers.delete(peerId);
     document.getElementById('peer-vol-pop')?.remove();
     // Fermer l'overlay de partage d'écran si ce pair partageait
     document.getElementById(`screen-overlay-${peerId}`)?.remove();
@@ -1028,18 +1096,32 @@ const Voice = (() => {
     screenConsumers.delete(peerId);
   }
 
-  function renderVoiceRoom(channelName) {
+  // Vue centrale du salon vocal (titre + tuile « moi »)
+  function renderVoiceRoomView(channelName) {
     const user = Auth.getUser();
     document.getElementById('content-area').innerHTML = `
       <div class="flex flex-col items-center justify-center flex-1 gap-6">
-        <h3 class="text-xl font-semibold text-onkoz-text-md">🎤 ${channelName}</h3>
+        <h3 class="text-xl font-semibold text-onkoz-text-md">🎤 ${esc(channelName)}</h3>
         <div id="voice-peers-container" class="flex flex-wrap gap-4 justify-center">
           <div class="voice-peer flex flex-col items-center gap-2 px-4 py-3 bg-onkoz-surface rounded-xl min-w-[80px]" id="vp-self" data-user-id="${user.id}">
             ${voiceAvatarHtml(user.username, user.id)}
-            <span class="text-[0.8rem] text-onkoz-text-md text-center">${user.username} <span class="text-onkoz-text-muted">(moi)</span></span>
+            <span class="text-[0.8rem] text-onkoz-text-md text-center">${esc(user.username)} <span class="text-onkoz-text-muted">(moi)</span></span>
           </div>
         </div>
       </div>`;
+  }
+
+  /** Ré-affiche la vue du salon vocal en cours SANS se reconnecter
+      (retour depuis un salon texte). */
+  function showRoomView(channelName) {
+    if (!currentRoomId) return;
+    renderVoiceRoomView(channelName);
+    roomPeers.forEach(({ username, userId }, peerId) => appendPeerTile(peerId, username, userId));
+  }
+
+  function renderVoiceRoom(channelName) {
+    const user = Auth.getUser();
+    renderVoiceRoomView(channelName);
     // Initialiser l'overlay avec soi-même
     overlayMembers.clear();
     overlayMembers.set('self', { username: user.username + ' (moi)', speaking: false });
@@ -1052,7 +1134,7 @@ const Voice = (() => {
       <div class="flex flex-col items-center justify-center flex-1 gap-3 text-onkoz-text-muted">
         <div class="text-5xl">⚠️</div>
         <h2 class="text-onkoz-text-md text-xl font-semibold">Erreur microphone</h2>
-        <p class="text-sm text-center max-w-xs">${msg}<br>Vérifiez les permissions microphone dans votre navigateur.</p>
+        <p class="text-sm text-center max-w-xs">${esc(msg)}<br>Vérifiez les permissions microphone dans votre navigateur.</p>
       </div>`;
   }
 
@@ -1134,7 +1216,7 @@ const Voice = (() => {
     const cur = Math.round(getPeerVolume(peerId) * 100);
     pop.innerHTML = `
       <div class="flex items-center justify-between">
-        <span class="text-[0.72rem] font-semibold text-onkoz-text truncate">${username}</span>
+        <span class="text-[0.72rem] font-semibold text-onkoz-text truncate">${esc(username)}</span>
         <span class="pv-val text-[0.72rem] text-onkoz-text-muted font-mono">${cur}%</span>
       </div>
       <input type="range" min="0" max="100" step="5" value="${cur}"
@@ -1181,6 +1263,8 @@ const Voice = (() => {
     onPeerLeft,
     onExistingPeers,
     getCurrentRoomId: () => currentRoomId,
+    showRoomView,
+    refreshSidebarSpeaking,
     toggleOverlay: () => {
       if (window.ElectronAPI?.isElectron) {
         window.ElectronAPI.overlayToggle();
