@@ -10,6 +10,7 @@ const cors       = require('cors');
 const { getDb, cleanOldDMs }       = require('./db/database');
 const { createWorkers }            = require('./mediasoup/worker');
 const { setupSocketHandlers }      = require('./socket/handlers');
+const { setupSpeedG }              = require('./socket/speedg');
 
 const authRoutes     = require('./routes/auth');
 const channelRoutes  = require('./routes/channels');
@@ -19,6 +20,7 @@ const uploadRoutes    = require('./routes/upload');
 const previewRoutes   = require('./routes/preview');
 const bugRoutes       = require('./routes/bugs');
 const zeroGravityRoutes = require('./routes/zerogravity');
+const speedGRoutes      = require('./routes/speedg');
 
 const PORT = process.env.PORT || 3000;
 
@@ -97,6 +99,9 @@ app.use('/api/bugs',      bugRoutes);
 // Jeu Zero-Gravity : pages (jeux/zero-gravity/) + classement (api/classement, api/essai, api/resultat)
 app.use('/jeux/zero-gravity', zeroGravityRoutes);
 
+// Jeu SpeedG : page du jeu + musique (jeux/speedg/). Le mode en ligne passe par Socket.IO (/speedg).
+app.use('/jeux/speedg', speedGRoutes);
+
 // Health check
 app.get('/api/health', (_, res) => res.json({ status: 'ok', ts: Date.now() }));
 
@@ -133,6 +138,9 @@ async function start() {
 
     // Socket handlers
     setupSocketHandlers(io);
+
+    // SpeedG en ligne : espace de noms Socket.IO séparé (/speedg)
+    setupSpeedG(io);
 
     // Nettoyage DM
     scheduleDMCleanup();

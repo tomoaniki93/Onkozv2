@@ -115,9 +115,13 @@ const App = (() => {
     }
 
     // ── Jeux ──
-    // Sous le Bug Tracker : Zero-Gravity, affiché dans la zone centrale.
+    // Sous le Bug Tracker : Zero-Gravity puis SpeedG, affichés dans la zone centrale.
     if (typeof ZeroGravity !== 'undefined') {
-      list.appendChild(ZeroGravity.createSidebarSection());
+      const games = ZeroGravity.createSidebarSection();
+      if (typeof SpeedG !== 'undefined') {
+        games.querySelector('ul')?.appendChild(SpeedG.createSidebarItem());
+      }
+      list.appendChild(games);
     }
 
     // Glisser-déposer pour réorganiser (admin/mod)
