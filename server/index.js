@@ -21,6 +21,7 @@ const previewRoutes   = require('./routes/preview');
 const bugRoutes       = require('./routes/bugs');
 const zeroGravityRoutes = require('./routes/zerogravity');
 const speedGRoutes      = require('./routes/speedg');
+const doomBeatRoutes    = require('./routes/doombeat');
 
 const PORT = process.env.PORT || 3000;
 
@@ -101,6 +102,9 @@ app.use('/jeux/zero-gravity', zeroGravityRoutes);
 
 // Jeu SpeedG : page du jeu + musique (jeux/speedg/). Le mode en ligne passe par Socket.IO (/speedg).
 app.use('/jeux/speedg', speedGRoutes);
+
+// Jeu DoomBeat : page du jeu + musique (jeux/doombeat/). Jeu local, sans API.
+app.use('/jeux/doombeat', doomBeatRoutes);
 
 // Health check
 app.get('/api/health', (_, res) => res.json({ status: 'ok', ts: Date.now() }));

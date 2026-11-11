@@ -115,11 +115,14 @@ const App = (() => {
     }
 
     // ── Jeux ──
-    // Sous le Bug Tracker : Zero-Gravity puis SpeedG, affichés dans la zone centrale.
+    // Sous le Bug Tracker : Zero-Gravity, SpeedG puis DoomBeat, affichés dans la zone centrale.
     if (typeof ZeroGravity !== 'undefined') {
       const games = ZeroGravity.createSidebarSection();
       if (typeof SpeedG !== 'undefined') {
         games.querySelector('ul')?.appendChild(SpeedG.createSidebarItem());
+      }
+      if (typeof DoomBeat !== 'undefined') {
+        games.querySelector('ul')?.appendChild(DoomBeat.createSidebarItem());
       }
       list.appendChild(games);
     }
